@@ -6,6 +6,7 @@ public class TiendaDto
 {
     public int Id { get; set; }
     public string Nombre { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
     public string? Direccion { get; set; }
     public string? Telefono { get; set; }
     public DateTime CreadaEn { get; set; }
@@ -14,6 +15,7 @@ public class TiendaDto
 public class CrearTiendaDto
 {
     public string Nombre { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
     public string? Direccion { get; set; }
     public string? Telefono { get; set; }
 }

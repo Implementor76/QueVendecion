@@ -21,6 +21,12 @@ public class TiendaService : ITiendaService
         return tienda == null ? null : MapToDto(tienda);
     }
 
+    public async Task<TiendaDto?> ObtenerPorSlugAsync(string slug)
+    {
+        var tienda = await _context.Tiendas.FirstOrDefaultAsync(t => t.Slug == slug);
+        return tienda == null ? null : MapToDto(tienda);
+    }
+
     public async Task<List<TiendaDto>> ObtenerTodasAsync()
     {
         return await _context.Tiendas
@@ -33,6 +39,7 @@ public class TiendaService : ITiendaService
         var tienda = new Tienda
         {
             Nombre = dto.Nombre,
+            Slug = dto.Slug.ToLower().Replace(" ", "-"),
             Direccion = dto.Direccion,
             Telefono = dto.Telefono
         };
@@ -49,6 +56,7 @@ public class TiendaService : ITiendaService
         if (tienda == null) return null;
 
         tienda.Nombre = dto.Nombre;
+        tienda.Slug = dto.Slug.ToLower().Replace(" ", "-");
         tienda.Direccion = dto.Direccion;
         tienda.Telefono = dto.Telefono;
 
@@ -70,6 +78,7 @@ public class TiendaService : ITiendaService
     {
         Id = t.Id,
         Nombre = t.Nombre,
+        Slug = t.Slug,
         Direccion = t.Direccion,
         Telefono = t.Telefono,
         CreadaEn = t.CreadaEn

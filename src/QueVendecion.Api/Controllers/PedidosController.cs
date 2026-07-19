@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QueVendecion.Application.DTOs;
 using QueVendecion.Application.Interfaces;
@@ -7,6 +9,7 @@ namespace QueVendecion.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class PedidosController : ControllerBase
 {
     private readonly IPedidoService _pedidoService;
@@ -16,9 +19,12 @@ public class PedidosController : ControllerBase
         _pedidoService = pedidoService;
     }
 
-    [HttpGet("tienda/{tiendaId}")]
-    public async Task<ActionResult<List<PedidoDto>>> ObtenerPorTienda(int tiendaId, [FromQuery] EstadoPedido? estado)
+    private int GetTiendaId() => int.Parse(User.FindFirst("TiendaId")?.Value ?? "0");
+
+    [HttpGet("mi-tienda")]
+    public async Task<ActionResult<List<PedidoDto>>> ObtenerMisPedidos([FromQuery] EstadoPedido? estado)
     {
+        var tiendaId = GetTiendaId();
         return await _pedidoService.ObtenerPorTiendaAsync(tiendaId, estado);
     }
 
@@ -28,13 +34,6 @@ public class PedidosController : ControllerBase
         var pedido = await _pedidoService.ObtenerPorIdAsync(id);
         if (pedido == null) return NotFound();
         return pedido;
-    }
-
-    [HttpPost]
-    public async Task<ActionResult<PedidoDto>> Crear([FromBody] CrearPedidoDto dto)
-    {
-        var pedido = await _pedidoService.CrearAsync(dto);
-        return CreatedAtAction(nameof(ObtenerPorId), new { id = pedido.Id }, pedido);
     }
 
     [HttpPatch("{id}/estado")]
@@ -51,13 +50,5 @@ public class PedidosController : ControllerBase
         var pedido = await _pedidoService.ActualizarEstadoPagoAsync(id, dto.EstadoPago);
         if (pedido == null) return NotFound();
         return pedido;
-    }
-
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Eliminar(int id)
-    {
-        var eliminado = await _pedidoService.EliminarAsync(id);
-        if (!eliminado) return NotFound();
-        return NoContent();
     }
 }

@@ -43,6 +43,18 @@ public class ClienteService : IClienteService
         return MapToDto(cliente);
     }
 
+    public async Task ActualizarDeviceTokenAsync(string telefono, string deviceToken)
+    {
+        var cliente = await _context.Clientes
+            .FirstOrDefaultAsync(c => c.Telefono == telefono);
+
+        if (cliente != null)
+        {
+            cliente.DeviceToken = deviceToken;
+            await _context.SaveChangesAsync();
+        }
+    }
+
     private static ClienteDto MapToDto(Cliente c) => new()
     {
         Id = c.Id,

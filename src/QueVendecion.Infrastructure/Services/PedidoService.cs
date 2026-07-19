@@ -34,6 +34,18 @@ public class PedidoService : IPedidoService
         return pedidos.Select(MapToDto).ToList();
     }
 
+    public async Task<List<PedidoDto>> ObtenerPorClienteAsync(int tiendaId, int clienteId)
+    {
+        var pedidos = await _context.Pedidos
+            .Include(p => p.Items)
+            .ThenInclude(i => i.Producto)
+            .Where(p => p.TiendaId == tiendaId && p.ClienteId == clienteId)
+            .OrderByDescending(p => p.CreadoEn)
+            .ToListAsync();
+
+        return pedidos.Select(MapToDto).ToList();
+    }
+
     public async Task<PedidoDto?> ObtenerPorIdAsync(int id)
     {
         var pedido = await _context.Pedidos
@@ -49,6 +61,7 @@ public class PedidoService : IPedidoService
         var pedido = new Pedido
         {
             TiendaId = dto.TiendaId,
+            ClienteId = dto.ClienteId,
             ClienteNombre = dto.ClienteNombre,
             FormaPago = dto.FormaPago,
             Observaciones = dto.Observaciones
@@ -116,6 +129,7 @@ public class PedidoService : IPedidoService
     {
         Id = p.Id,
         TiendaId = p.TiendaId,
+        ClienteId = p.ClienteId,
         ClienteNombre = p.ClienteNombre,
         Estado = p.Estado,
         FormaPago = p.FormaPago,

@@ -2,6 +2,7 @@ namespace QueVendecion.Domain.Enums;
 
 public enum RolUsuario
 {
-    Admin = 0,
-    Staff = 1
+    SuperAdmin = 0,
+    Admin = 1,
+    Staff = 2
 }

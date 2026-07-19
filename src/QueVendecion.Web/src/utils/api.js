@@ -1,11 +1,19 @@
+import { getToken } from './auth.js';
+
 const API_BASE = '/api';
 
 async function request(url, options = {}) {
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_BASE}${url}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
-    },
+    headers,
     ...options
   });
 
@@ -19,36 +27,38 @@ async function request(url, options = {}) {
 
 export const api = {
   tiendas: {
-    getAll: () => request('/tiendas'),
-    getById: (id) => request(`/tiendas/${id}`),
-    create: (data) => request('/tiendas', { method: 'POST', body: JSON.stringify(data) }),
+    getMiTienda: () => request('/tiendas/mi-tienda'),
     update: (id, data) => request(`/tiendas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => request(`/tiendas/${id}`, { method: 'DELETE' })
   },
   productos: {
-    getByTienda: (tiendaId) => request(`/tiendas/${tiendaId}/productos`),
-    getById: (id) => request(`/tiendas/0/productos/${id}`),
-    create: (tiendaId, data) => request(`/tiendas/${tiendaId}/productos`, { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => request(`/tiendas/0/productos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => request(`/tiendas/0/productos/${id}`, { method: 'DELETE' })
+    getByMiTienda: () => request('/tiendas/mi-tienda/productos'),
+    create: (data) => request('/tiendas/mi-tienda/productos', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request(`/tiendas/mi-tienda/productos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => request(`/tiendas/mi-tienda/productos/${id}`, { method: 'DELETE' })
   },
   pedidos: {
-    getByTienda: (tiendaId, estado) => {
+    getMisPedidos: (estado) => {
       const params = estado ? `?estado=${estado}` : '';
-      return request(`/pedidos/tienda/${tiendaId}${params}`);
+      return request(`/pedidos/mi-tienda${params}`);
     },
     getById: (id) => request(`/pedidos/${id}`),
-    create: (data) => request('/pedidos', { method: 'POST', body: JSON.stringify(data) }),
     updateEstado: (id, estado) => request(`/pedidos/${id}/estado`, { method: 'PATCH', body: JSON.stringify({ estado }) }),
     updatePago: (id, estadoPago) => request(`/pedidos/${id}/pago`, { method: 'PATCH', body: JSON.stringify({ estadoPago }) }),
-    delete: (id) => request(`/pedidos/${id}`, { method: 'DELETE' })
-  },
-  clientes: {
-    getByTelefono: (telefono) => request(`/clientes/telefono/${telefono}`),
-    createOrGet: (data) => request('/clientes', { method: 'POST', body: JSON.stringify(data) })
   },
   auth: {
     login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
-    registrar: (data) => request('/auth/registrar', { method: 'POST', body: JSON.stringify(data) })
+    registrar: (data) => request('/auth/registrar', { method: 'POST', body: JSON.stringify(data) }),
+    cambiarPassword: (data) => request('/auth/cambiar-password', { method: 'POST', body: JSON.stringify(data) })
+  },
+  superAdmin: {
+    crearTienda: (data) => request('/superadmin/tienda', { method: 'POST', body: JSON.stringify(data) }),
+    getTiendas: () => request('/superadmin/tiendas')
+  },
+  public: {
+    getTienda: (slug) => request(`/public/tienda/${slug}`),
+    getMenu: (slug) => request(`/public/tienda/${slug}/menu`),
+    registrarCliente: (slug, data) => request(`/public/tienda/${slug}/cliente`, { method: 'POST', body: JSON.stringify(data) }),
+    getPedidosCliente: (slug, telefono) => request(`/public/tienda/${slug}/cliente/${encodeURIComponent(telefono)}/pedidos`),
+    crearPedido: (slug, data) => request(`/public/tienda/${slug}/pedido`, { method: 'POST', body: JSON.stringify(data) })
   }
 };

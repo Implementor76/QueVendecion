@@ -10,6 +10,8 @@ public class TiendaConfiguration : IEntityTypeConfiguration<Tienda>
     {
         builder.HasKey(t => t.Id);
         builder.Property(t => t.Nombre).IsRequired().HasMaxLength(100);
+        builder.Property(t => t.Slug).IsRequired().HasMaxLength(50);
+        builder.HasIndex(t => t.Slug).IsUnique();
         builder.Property(t => t.Direccion).HasMaxLength(200);
         builder.Property(t => t.Telefono).HasMaxLength(20);
     }

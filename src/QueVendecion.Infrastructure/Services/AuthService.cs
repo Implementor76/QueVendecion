@@ -26,7 +26,7 @@ public class AuthService : IAuthService
     public async Task<AuthResponseDto?> LoginAsync(LoginDto dto)
     {
         var usuario = await _context.UsuariosTienda
-            .FirstOrDefaultAsync(u => u.Email == dto.Email && u.TiendaId == dto.TiendaId && u.Activo);
+            .FirstOrDefaultAsync(u => u.Email == dto.Email && u.Activo);
 
         if (usuario == null || !BCrypt.Net.BCrypt.Verify(dto.Password, usuario.PasswordHash))
             return null;

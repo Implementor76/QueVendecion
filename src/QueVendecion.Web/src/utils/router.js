@@ -1,8 +1,7 @@
-let currentRoute = '';
-let routes = {};
+let routes = [];
 
 export function registerRoute(path, handler) {
-  routes[path] = handler;
+  routes.push({ path, handler });
 }
 
 export function navigate(path) {
@@ -10,14 +9,41 @@ export function navigate(path) {
   render();
 }
 
+function matchRoute(pathname) {
+  for (const route of routes) {
+    const routeParts = route.path.split('/');
+    const pathParts = pathname.split('/');
+
+    if (routeParts.length !== pathParts.length) continue;
+
+    const params = {};
+    let match = true;
+
+    for (let i = 0; i < routeParts.length; i++) {
+      if (routeParts[i].startsWith(':')) {
+        params[routeParts[i].slice(1)] = pathParts[i];
+      } else if (routeParts[i] !== pathParts[i]) {
+        match = false;
+        break;
+      }
+    }
+
+    if (match) return { handler: route.handler, params };
+  }
+  return null;
+}
+
 function render() {
   const app = document.getElementById('app');
-  const path = window.location.pathname;
+  const pathname = window.location.pathname;
 
-  const handler = routes[path] || routes['/'];
-  if (handler) {
+  const result = matchRoute(pathname);
+  if (result) {
     app.innerHTML = '';
-    handler(app);
+    result.handler(app, result.params);
+  } else {
+    app.innerHTML = '';
+    routes[0]?.handler(app, {});
   }
 }
 

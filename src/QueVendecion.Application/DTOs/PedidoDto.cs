@@ -6,6 +6,7 @@ public class PedidoDto
 {
     public int Id { get; set; }
     public int TiendaId { get; set; }
+    public int? ClienteId { get; set; }
     public string? ClienteNombre { get; set; }
     public EstadoPedido Estado { get; set; }
     public FormaPago FormaPago { get; set; }
@@ -19,6 +20,7 @@ public class PedidoDto
 public class CrearPedidoDto
 {
     public int TiendaId { get; set; }
+    public int? ClienteId { get; set; }
     public string? ClienteNombre { get; set; }
     public FormaPago FormaPago { get; set; }
     public string? Observaciones { get; set; }

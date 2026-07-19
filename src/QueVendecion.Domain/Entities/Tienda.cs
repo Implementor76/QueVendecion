@@ -4,6 +4,7 @@ public class Tienda
 {
     public int Id { get; set; }
     public string Nombre { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
     public string? Direccion { get; set; }
     public string? Telefono { get; set; }
     public DateTime CreadaEn { get; set; } = DateTime.UtcNow;

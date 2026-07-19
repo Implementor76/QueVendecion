@@ -18,6 +18,13 @@ export function isLoggedIn() {
 }
 
 export function getToken() {
-  const auth = getAuth();
-  return auth?.token;
+  return getAuth()?.token;
+}
+
+export function getTiendaId() {
+  return getAuth()?.tiendaId;
+}
+
+export function getUserName() {
+  return getAuth()?.nombre;
 }
