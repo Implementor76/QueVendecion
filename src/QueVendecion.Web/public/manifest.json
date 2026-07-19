@@ -1,0 +1,16 @@
+{
+  "name": "QuéVendecion",
+  "short_name": "QuéVendecion",
+  "description": "Organiza tus pedidos fácilmente",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f6f0",
+  "theme_color": "#312c51",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
