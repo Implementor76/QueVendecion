@@ -58,6 +58,11 @@ public class TiendasController : ControllerBase
     [HttpPut("mi-tienda/productos/{id}")]
     public async Task<ActionResult<ProductoDto>> ActualizarProducto(int id, [FromBody] CrearProductoDto dto)
     {
+        var tiendaId = GetTiendaId();
+        var existente = await _productoService.ObtenerPorIdAsync(id);
+        if (existente == null) return NotFound();
+        if (existente.TiendaId != tiendaId) return Forbid();
+
         var producto = await _productoService.ActualizarAsync(id, dto);
         if (producto == null) return NotFound();
         return producto;
@@ -66,6 +71,11 @@ public class TiendasController : ControllerBase
     [HttpDelete("mi-tienda/productos/{id}")]
     public async Task<IActionResult> EliminarProducto(int id)
     {
+        var tiendaId = GetTiendaId();
+        var existente = await _productoService.ObtenerPorIdAsync(id);
+        if (existente == null) return NotFound();
+        if (existente.TiendaId != tiendaId) return Forbid();
+
         var eliminado = await _productoService.EliminarAsync(id);
         if (!eliminado) return NotFound();
         return NoContent();

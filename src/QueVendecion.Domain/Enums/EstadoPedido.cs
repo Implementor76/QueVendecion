@@ -3,8 +3,9 @@ namespace QueVendecion.Domain.Enums;
 public enum EstadoPedido
 {
     Recibido = 0,
-    EnPreparacion = 1,
-    Listo = 2,
-    Entregado = 3,
-    Cancelado = 4
+    Confirmado = 1,
+    EnPreparacion = 2,
+    Listo = 3,
+    Entregado = 4,
+    Cancelado = 5
 }

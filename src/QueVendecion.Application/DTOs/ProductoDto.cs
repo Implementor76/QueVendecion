@@ -11,6 +11,8 @@ public class ProductoDto
     public decimal Precio { get; set; }
     public bool Disponible { get; set; }
     public string? ImagenUrl { get; set; }
+    public bool TieneInventario { get; set; }
+    public int? Stock { get; set; }
 }
 
 public class CrearProductoDto
@@ -20,4 +22,6 @@ public class CrearProductoDto
     public decimal Precio { get; set; }
     public bool Disponible { get; set; } = true;
     public string? ImagenUrl { get; set; }
+    public bool TieneInventario { get; set; }
+    public int? Stock { get; set; }
 }

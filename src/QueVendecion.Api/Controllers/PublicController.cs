@@ -77,6 +77,17 @@ public class PublicController : ControllerBase
         var tienda = await _tiendaService.ObtenerPorSlugAsync(slug);
         if (tienda == null) return NotFound();
 
+        if (!string.IsNullOrWhiteSpace(dto.TelefonoCliente))
+        {
+            var cliente = await _clienteService.CrearOCrearAsync(new CrearClienteDto
+            {
+                Nombre = dto.ClienteNombre ?? "Cliente",
+                Telefono = dto.TelefonoCliente
+            });
+            dto.ClienteId = cliente.Id;
+            dto.ClienteNombre = cliente.Nombre;
+        }
+
         dto.TiendaId = tienda.Id;
         var pedido = await _pedidoService.CrearAsync(dto);
         return CreatedAtAction(nameof(CrearPedido), new { slug }, pedido);

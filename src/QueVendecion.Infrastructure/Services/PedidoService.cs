@@ -67,11 +67,18 @@ public class PedidoService : IPedidoService
             Observaciones = dto.Observaciones
         };
 
+        var requisiciones = new Dictionary<Producto, int>();
+
         foreach (var itemDto in dto.Items)
         {
             var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
             if (producto == null)
                 throw new InvalidOperationException($"Producto {itemDto.ProductoId} no encontrado");
+
+            if (producto.TieneInventario && (producto.Stock ?? 0) < itemDto.Cantidad)
+                throw new InvalidOperationException($"Stock insuficiente para {producto.Nombre}");
+
+            requisiciones[producto] = itemDto.Cantidad;
 
             var item = new ItemPedido
             {
@@ -88,16 +95,65 @@ public class PedidoService : IPedidoService
         _context.Pedidos.Add(pedido);
         await _context.SaveChangesAsync();
 
+        foreach (var (producto, cantidad) in requisiciones)
+        {
+            if (!producto.TieneInventario) continue;
+
+            var stockAnterior = producto.Stock ?? 0;
+            producto.Stock = stockAnterior - cantidad;
+
+            _context.MovimientosInventario.Add(new MovimientoInventario
+            {
+                ProductoId = producto.Id,
+                Tipo = TipoMovimiento.Salida,
+                Cantidad = cantidad,
+                StockAnterior = stockAnterior,
+                StockNuevo = producto.Stock.Value,
+                PedidoId = pedido.Id,
+                Observaciones = $"Venta pedido {pedido.Id}"
+            });
+        }
+
+        await _context.SaveChangesAsync();
+
         return await ObtenerPorIdAsync(pedido.Id) ?? MapToDto(pedido);
     }
 
     public async Task<PedidoDto?> ActualizarEstadoAsync(int id, EstadoPedido estado)
     {
-        var pedido = await _context.Pedidos.FindAsync(id);
+        var pedido = await _context.Pedidos
+            .Include(p => p.Items)
+            .ThenInclude(i => i.Producto)
+            .FirstOrDefaultAsync(p => p.Id == id);
         if (pedido == null) return null;
 
+        var estadoAnterior = pedido.Estado;
         pedido.Estado = estado;
         pedido.ActualizadoEn = DateTime.UtcNow;
+
+        if (estado == EstadoPedido.Cancelado && estadoAnterior != EstadoPedido.Cancelado)
+        {
+            foreach (var item in pedido.Items)
+            {
+                var producto = item.Producto;
+                if (producto == null || !producto.TieneInventario) continue;
+
+                var stockAnterior = producto.Stock ?? 0;
+                producto.Stock = stockAnterior + item.Cantidad;
+
+                _context.MovimientosInventario.Add(new MovimientoInventario
+                {
+                    ProductoId = producto.Id,
+                    Tipo = TipoMovimiento.Entrada,
+                    Cantidad = item.Cantidad,
+                    StockAnterior = stockAnterior,
+                    StockNuevo = producto.Stock.Value,
+                    PedidoId = pedido.Id,
+                    Observaciones = "Reintegro por cancelación de pedido"
+                });
+            }
+        }
+
         await _context.SaveChangesAsync();
 
         return await ObtenerPorIdAsync(id);
@@ -137,6 +193,7 @@ public class PedidoService : IPedidoService
         Total = p.Total,
         Observaciones = p.Observaciones,
         CreadoEn = p.CreadoEn,
+        ActualizadoEn = p.ActualizadoEn,
         Items = p.Items.Select(i => new ItemPedidoDto
         {
             Id = i.Id,

@@ -33,22 +33,31 @@ public class PedidosController : ControllerBase
     {
         var pedido = await _pedidoService.ObtenerPorIdAsync(id);
         if (pedido == null) return NotFound();
+        if (pedido.TiendaId != GetTiendaId()) return Forbid();
         return pedido;
     }
 
     [HttpPatch("{id}/estado")]
     public async Task<ActionResult<PedidoDto>> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
     {
-        var pedido = await _pedidoService.ActualizarEstadoAsync(id, dto.Estado);
+        var pedido = await _pedidoService.ObtenerPorIdAsync(id);
         if (pedido == null) return NotFound();
-        return pedido;
+        if (pedido.TiendaId != GetTiendaId()) return Forbid();
+
+        var actualizado = await _pedidoService.ActualizarEstadoAsync(id, dto.Estado);
+        if (actualizado == null) return NotFound();
+        return actualizado;
     }
 
     [HttpPatch("{id}/pago")]
     public async Task<ActionResult<PedidoDto>> ActualizarEstadoPago(int id, [FromBody] ActualizarEstadoPagoDto dto)
     {
-        var pedido = await _pedidoService.ActualizarEstadoPagoAsync(id, dto.EstadoPago);
+        var pedido = await _pedidoService.ObtenerPorIdAsync(id);
         if (pedido == null) return NotFound();
-        return pedido;
+        if (pedido.TiendaId != GetTiendaId()) return Forbid();
+
+        var actualizado = await _pedidoService.ActualizarEstadoPagoAsync(id, dto.EstadoPago);
+        if (actualizado == null) return NotFound();
+        return actualizado;
     }
 }

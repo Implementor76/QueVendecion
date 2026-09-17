@@ -2,6 +2,26 @@ import { api } from '../utils/api.js';
 import { getAuth, clearAuth } from '../utils/auth.js';
 import { navigate } from '../utils/router.js';
 
+function renderAdminNav(active) {
+  const items = [
+    { href: '/pedidos', icon: 'clipboard-list', label: 'Pedidos', id: 'pedidos' },
+    { href: '/menu', icon: 'utensils', label: 'Menú', id: 'menu' },
+    { href: '/mi-tienda', icon: 'store', label: 'Tienda', id: 'tienda' },
+  ];
+  return `
+    <div class="bottom-nav">
+      <div class="nav-items">
+        ${items.map(i => `
+          <a href="${i.href}" data-link class="nav-item ${i.id === active ? 'active' : ''}">
+            <i data-lucide="${i.icon}"></i>
+            <span>${i.label}</span>
+          </a>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 export function renderMenu(container, params) {
   const auth = getAuth();
   if (!auth) {
@@ -10,58 +30,60 @@ export function renderMenu(container, params) {
   }
 
   container.innerHTML = `
-    <div class="min-h-screen bg-surface pb-20">
-      <header class="bg-primary text-white p-4 flex justify-between items-center">
-        <h1 class="text-xl font-bold">Mi Menú</h1>
-        <button id="btn-logout" class="text-sm text-accent hover:underline">Salir</button>
-      </header>
-      <main class="p-4">
+    <div class="min-h-screen bg-surface page-padding-bottom">
+      <div class="header-primary flex justify-between items-center">
+        <div>
+          <p class="text-accent text-[0.8125rem] font-medium">Mi Tienda</p>
+          <h1 class="text-xl font-bold mt-0.5">Menú</h1>
+        </div>
+        <button id="btn-logout" class="btn-icon bg-white/10 text-white/80 hover:bg-white/20">
+          <i data-lucide="log-out" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <main class="page-padding page-padding-bottom" style="margin-top:-8px">
         <div id="menu-actions" class="mb-4">
-          <button id="btn-agregar" class="btn-accent w-full">+ Agregar Producto</button>
+          <button id="btn-agregar" class="btn-accent w-full">
+            <i data-lucide="plus" class="w-5 h-5"></i> Agregar Producto
+          </button>
         </div>
         <div id="form-agregar" class="hidden mb-4">
-          <div class="card">
-            <h3 class="font-semibold text-primary mb-3">Nuevo Producto</h3>
+          <div class="card-elevated animate-scale-in">
+            <h3 class="font-semibold text-primary mb-3 flex items-center gap-2">
+              <i data-lucide="plus-circle" class="w-5 h-5 text-accent"></i>
+              Nuevo Producto
+            </h3>
             <form id="form-producto" class="space-y-3">
               <input type="text" id="prod-nombre" placeholder="Nombre del producto" class="input-field" required />
               <input type="text" id="prod-descripcion" placeholder="Descripción (opcional)" class="input-field" />
               <input type="number" id="prod-precio" placeholder="Precio" step="0.01" min="0" class="input-field" required />
-              <div id="prod-msg" class="text-sm hidden"></div>
+              <label class="flex items-center justify-between gap-3 text-sm text-text-secondary cursor-pointer">
+                <span>Controlar inventario</span>
+                <input type="checkbox" id="prod-tiene-inventario" class="toggle-input" />
+              </label>
+              <input type="number" id="prod-stock" placeholder="Stock" step="1" min="0" class="input-field hidden" />
+              <div id="prod-msg" class="text-sm hidden text-center"></div>
               <div class="flex gap-2">
-                <button type="button" id="btn-cancelar" class="btn-primary flex-1">Cancelar</button>
-                <button type="submit" class="btn-accent flex-1">Agregar</button>
+                <button type="button" id="btn-cancelar" class="btn-ghost flex-1">Cancelar</button>
+                <button type="submit" class="btn-accent flex-1">
+                  <i data-lucide="plus" class="w-4 h-4"></i> Agregar
+                </button>
               </div>
             </form>
           </div>
         </div>
         <div id="menu-list" class="space-y-3">
-          <p class="text-center text-primary-light py-8">Cargando productos...</p>
+          <div class="space-y-3">
+            <div class="skeleton h-20 w-full"></div>
+            <div class="skeleton h-20 w-full"></div>
+            <div class="skeleton h-20 w-full"></div>
+          </div>
         </div>
       </main>
-      <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-2">
-        <div class="flex justify-around">
-          <a href="/pedidos" data-link class="flex flex-col items-center p-2 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-            </svg>
-            <span class="text-xs">Pedidos</span>
-          </a>
-          <a href="/menu" data-link class="flex flex-col items-center p-2 text-accent">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-            </svg>
-            <span class="text-xs">Menú</span>
-          </a>
-          <a href="/mi-tienda" data-link class="flex flex-col items-center p-2 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-            </svg>
-            <span class="text-xs">Tienda</span>
-          </a>
-        </div>
-      </nav>
+      ${renderAdminNav('menu')}
     </div>
   `;
+
+  if (window.lucide) lucide.createIcons();
 
   container.querySelector('#btn-logout').addEventListener('click', () => {
     clearAuth();
@@ -81,6 +103,12 @@ export function renderMenu(container, params) {
     container.querySelector('#prod-msg').classList.add('hidden');
   });
 
+  const invToggle = container.querySelector('#prod-inventario');
+  const stockWrap = container.querySelector('#prod-stock-wrap');
+  invToggle?.addEventListener('change', () => {
+    stockWrap?.classList.toggle('hidden', !invToggle.checked);
+  });
+
   container.querySelector('#form-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
     const msg = container.querySelector('#prod-msg');
@@ -89,10 +117,14 @@ export function renderMenu(container, params) {
         nombre: container.querySelector('#prod-nombre').value,
         descripcion: container.querySelector('#prod-descripcion').value || null,
         precio: parseFloat(container.querySelector('#prod-precio').value),
-        disponible: true
+        disponible: true,
+        tieneInventario: container.querySelector('#prod-tiene-inventario').checked,
+        stock: container.querySelector('#prod-tiene-inventario').checked
+          ? parseInt(container.querySelector('#prod-stock').value, 10) || 0
+          : null
       });
-      msg.textContent = '✓ Producto agregado. Agrega otro o cancela.';
-      msg.className = 'text-sm text-green-600';
+      msg.textContent = '¡Producto agregado! Agrega otro o cierra.';
+      msg.className = 'text-sm text-success';
       container.querySelector('#prod-nombre').value = '';
       container.querySelector('#prod-descripcion').value = '';
       container.querySelector('#prod-precio').value = '';
@@ -100,7 +132,7 @@ export function renderMenu(container, params) {
       loadProductos(container.querySelector('#menu-list'));
     } catch (err) {
       msg.textContent = 'Error al agregar producto';
-      msg.className = 'text-sm text-red-500';
+      msg.className = 'text-sm text-error';
     }
   });
 
@@ -112,24 +144,110 @@ async function loadProductos(container) {
     const productos = await api.productos.getByMiTienda();
 
     if (productos.length === 0) {
-      container.innerHTML = `<p class="text-center text-primary-light py-4">Aún no tienes productos. ¡Agrega el primero!</p>`;
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon"><i data-lucide="utensils-crossed"></i></div>
+          <h3>Sin productos</h3>
+          <p>Agrega tu primer producto para que tus clientes puedan ver tu menú</p>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
       return;
     }
 
     container.innerHTML = `
       <div class="space-y-3">
-        ${productos.map(p => `
-          <div class="card flex justify-between items-center" data-id="${p.id}">
+        ${productos.map((p, i) => `
+          <div class="card flex justify-between items-center animate-fade-in" style="animation-delay:${i * 40}ms" data-id="${p.id}">
             <div class="flex-1 mr-3">
-              <h3 class="font-semibold text-primary">${p.nombre}</h3>
-              ${p.descripcion ? `<p class="text-sm text-primary-light">${p.descripcion}</p>` : ''}
-              <p class="text-accent font-bold mt-1">$${p.precio.toFixed(2)}</p>
+              <h3 class="font-semibold text-primary text-[0.9375rem]">${p.nombre}</h3>
+              ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5">${p.descripcion}</p>` : ''}
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <span class="badge badge-accent">$${p.precio.toFixed(2)}</span>
+                ${p.tieneInventario
+                  ? `<span class="badge ${(p.stock ?? 0) > 0 ? 'bg-surface' : 'bg-error/10 text-error'}">
+                      <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                      ${(p.stock ?? 0) > 0 ? `${p.stock} en stock` : 'Agotado'}
+                    </span>`
+                  : ''}
+              </div>
             </div>
-            <button class="btn-delete text-red-400 hover:text-red-600 text-sm" data-id="${p.id}">Eliminar</button>
+            <div class="flex gap-1">
+              <button class="btn-icon bg-accent/10 text-accent hover:bg-accent/20 btn-edit" data-id="${p.id}" data-nombre="${p.nombre}" data-descripcion="${p.descripcion || ''}" data-precio="${p.precio}">
+                <i data-lucide="pencil" class="w-5 h-5"></i>
+              </button>
+              <button class="btn-icon bg-error/10 text-error hover:bg-error/20 btn-delete" data-id="${p.id}">
+                <i data-lucide="trash-2" class="w-5 h-5"></i>
+              </button>
+            </div>
           </div>
         `).join('')}
       </div>
+
+      <div id="modal-editar" class="modal-overlay hidden">
+        <div class="modal-sheet">
+          <div class="flex justify-between items-center mb-5">
+            <h2 class="text-lg font-bold text-primary">Editar Producto</h2>
+            <button id="btn-close-edit" class="btn-icon bg-surface">
+              <i data-lucide="x" class="w-5 h-5 text-text-secondary"></i>
+            </button>
+          </div>
+          <form id="form-editar" class="space-y-3">
+            <input type="hidden" id="edit-id" />
+            <input type="text" id="edit-nombre" placeholder="Nombre" class="input-field" required />
+            <input type="text" id="edit-descripcion" placeholder="Descripción" class="input-field" />
+            <input type="number" id="edit-precio" placeholder="Precio" step="0.01" min="0" class="input-field" required />
+            <label class="flex items-center justify-between gap-3 text-sm text-text-secondary cursor-pointer">
+              <span>Controlar inventario</span>
+              <input type="checkbox" id="edit-tiene-inventario" class="toggle-input" />
+            </label>
+            <div id="edit-stock-wrap" class="hidden">
+              <input type="number" id="edit-stock" placeholder="Stock" step="1" min="0" class="input-field" />
+            </div>
+            <button type="submit" class="btn-accent w-full">
+              <i data-lucide="check" class="w-4 h-4"></i> Guardar
+            </button>
+          </form>
+        </div>
+      </div>
     `;
+
+    if (window.lucide) lucide.createIcons();
+
+    container.querySelectorAll('.btn-edit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelector('#edit-id').value = btn.dataset.id;
+        container.querySelector('#edit-nombre').value = btn.dataset.nombre;
+        container.querySelector('#edit-descripcion').value = btn.dataset.descripcion;
+        container.querySelector('#edit-precio').value = btn.dataset.precio;
+        container.querySelector('#modal-editar').classList.remove('hidden');
+      });
+    });
+
+    container.querySelector('#btn-close-edit')?.addEventListener('click', () => {
+      container.querySelector('#modal-editar').classList.add('hidden');
+    });
+
+    container.querySelector('#form-editar').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = container.querySelector('#edit-id').value;
+      try {
+        await api.productos.update(id, {
+          nombre: container.querySelector('#edit-nombre').value,
+          descripcion: container.querySelector('#edit-descripcion').value || null,
+          precio: parseFloat(container.querySelector('#edit-precio').value),
+          disponible: true,
+          tieneInventario: container.querySelector('#edit-tiene-inventario').checked,
+          stock: container.querySelector('#edit-tiene-inventario').checked
+            ? parseInt(container.querySelector('#edit-stock').value, 10) || 0
+            : null
+        });
+        container.querySelector('#modal-editar').classList.add('hidden');
+        loadProductos(container);
+      } catch (err) {
+        alert('Error al guardar');
+      }
+    });
 
     container.querySelectorAll('.btn-delete').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -140,6 +258,13 @@ async function loadProductos(container) {
       });
     });
   } catch (error) {
-    container.innerHTML = `<p class="text-center text-red-500 py-8">Error al cargar productos</p>`;
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon"><i data-lucide="alert-circle"></i></div>
+        <h3>Error</h3>
+        <p>No se pudieron cargar los productos</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
   }
 }

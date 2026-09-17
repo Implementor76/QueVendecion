@@ -14,6 +14,7 @@ public class PedidoDto
     public decimal Total { get; set; }
     public string? Observaciones { get; set; }
     public DateTime CreadoEn { get; set; }
+    public DateTime? ActualizadoEn { get; set; }
     public List<ItemPedidoDto> Items { get; set; } = new();
 }
 
@@ -22,6 +23,7 @@ public class CrearPedidoDto
     public int TiendaId { get; set; }
     public int? ClienteId { get; set; }
     public string? ClienteNombre { get; set; }
+    public string? TelefonoCliente { get; set; }
     public FormaPago FormaPago { get; set; }
     public string? Observaciones { get; set; }
     public List<CrearItemPedidoDto> Items { get; set; } = new();

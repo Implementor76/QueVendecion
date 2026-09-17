@@ -38,7 +38,9 @@ public class ProductoService : IProductoService
             Descripcion = dto.Descripcion,
             Precio = dto.Precio,
             Disponible = dto.Disponible,
-            ImagenUrl = dto.ImagenUrl
+            ImagenUrl = dto.ImagenUrl,
+            TieneInventario = dto.TieneInventario,
+            Stock = dto.TieneInventario ? dto.Stock : null
         };
 
         _context.Productos.Add(producto);
@@ -57,6 +59,10 @@ public class ProductoService : IProductoService
         producto.Precio = dto.Precio;
         producto.Disponible = dto.Disponible;
         producto.ImagenUrl = dto.ImagenUrl;
+        producto.TieneInventario = dto.TieneInventario;
+        producto.Stock = dto.TieneInventario ? dto.Stock : null;
+        producto.TieneInventario = dto.TieneInventario;
+        producto.Stock = dto.TieneInventario ? dto.Stock : null;
 
         await _context.SaveChangesAsync();
         return MapToDto(producto);
@@ -80,6 +86,8 @@ public class ProductoService : IProductoService
         Descripcion = p.Descripcion,
         Precio = p.Precio,
         Disponible = p.Disponible,
-        ImagenUrl = p.ImagenUrl
+        ImagenUrl = p.ImagenUrl,
+        TieneInventario = p.TieneInventario,
+        Stock = p.Stock
     };
 }

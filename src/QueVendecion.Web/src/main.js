@@ -6,6 +6,7 @@ import { renderPedidos } from './pages/pedidos.js';
 import { renderMenu } from './pages/menu.js';
 import { renderLogin } from './pages/login.js';
 import { renderTiendaCliente } from './pages/tiendaCliente.js';
+import { renderSuperAdmin } from './pages/superAdmin.js';
 
 registerRoute('/', renderHome);
 registerRoute('/login', renderLogin);
@@ -13,5 +14,6 @@ registerRoute('/mi-tienda', renderTienda);
 registerRoute('/pedidos', renderPedidos);
 registerRoute('/menu', renderMenu);
 registerRoute('/tienda/:slug', renderTiendaCliente);
+registerRoute('/superadmin', renderSuperAdmin);
 
 initRouter();

@@ -76,8 +76,9 @@ public class AuthService : IAuthService
 
     private string GenerateToken(UsuarioTienda usuario)
     {
-        var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? "QueVendecion_SecretKey_2024_MVP_!"));
+        var jwtKey = _configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("Jwt:Key not configured. Set it in User Secrets or environment variables.");
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
 
         var claims = new[]
         {

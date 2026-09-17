@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QueVendecion.Application.DTOs;
@@ -9,6 +11,7 @@ namespace QueVendecion.Api.Controllers;
 
 [ApiController]
 [Route("api/superadmin")]
+[Authorize(Roles = "SuperAdmin")]
 public class SuperAdminController : ControllerBase
 {
     private readonly QueVendecionDbContext _context;
@@ -65,11 +68,55 @@ public class SuperAdminController : ControllerBase
                 t.Direccion,
                 t.Telefono,
                 t.CreadaEn,
-                Usuarios = t.Usuarios.Count
+                Usuarios = t.Usuarios.Count,
+                Pedidos = t.Pedidos.Count
             })
             .ToListAsync();
 
         return Ok(tiendas);
+    }
+
+    [HttpGet("tiendas/{id}")]
+    public async Task<ActionResult> ObtenerPorId(int id)
+    {
+        var tienda = await _context.Tiendas
+            .Where(t => t.Id == id)
+            .Select(t => new
+            {
+                t.Id,
+                t.Nombre,
+                t.Slug,
+                t.Direccion,
+                t.Telefono,
+                t.CreadaEn,
+                Usuarios = t.Usuarios.Select(u => new { u.Id, u.Nombre, u.Email, u.Rol }),
+                Pedidos = t.Pedidos.Count
+            })
+            .FirstOrDefaultAsync();
+
+        if (tienda == null) return NotFound();
+        return Ok(tienda);
+    }
+
+    [HttpDelete("tiendas/{id}/pedidos")]
+    public async Task<ActionResult> EliminarPedidos(int id)
+    {
+        var tienda = await _context.Tiendas.FindAsync(id);
+        if (tienda == null) return NotFound();
+
+        var items = await _context.ItemsPedido
+            .Where(i => i.Pedido.TiendaId == id)
+            .ToListAsync();
+        _context.ItemsPedido.RemoveRange(items);
+
+        var pedidos = await _context.Pedidos
+            .Where(p => p.TiendaId == id)
+            .ToListAsync();
+        _context.Pedidos.RemoveRange(pedidos);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { eliminados = pedidos.Count });
     }
 }
 

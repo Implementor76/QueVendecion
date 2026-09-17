@@ -4,17 +4,29 @@ import { getClient, setClient, removeClient } from '../utils/clientAuth.js';
 export function renderTiendaCliente(container, params) {
   const slug = params?.slug;
   if (!slug) {
-    container.innerHTML = `<p class="text-center py-8 text-primary-light">Tienda no encontrada</p>`;
+    container.innerHTML = `
+      <div class="min-h-screen flex items-center justify-center p-8">
+        <div class="empty-state">
+          <div class="empty-state-icon"><i data-lucide="alert-circle"></i></div>
+          <h3>Tienda no encontrada</h3>
+        </div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
     return;
   }
 
   container.innerHTML = `
     <div class="min-h-screen bg-surface">
-      <header class="bg-primary text-white p-4">
-        <h1 class="text-xl font-bold">Cargando tienda...</h1>
-      </header>
-      <main class="p-4">
-        <p class="text-center text-primary-light py-8">Cargando menú...</p>
+      <div class="header-primary">
+        <h1 class="text-xl font-bold animate-pulse">Cargando...</h1>
+      </div>
+      <main class="page-padding">
+        <div class="space-y-3">
+          <div class="skeleton h-20 w-full"></div>
+          <div class="skeleton h-20 w-full"></div>
+          <div class="skeleton h-20 w-full"></div>
+        </div>
       </main>
     </div>
   `;
@@ -35,38 +47,47 @@ async function loadTiendaCliente(container, slug) {
     renderApp(container, slug, tienda, cliente);
   } catch (error) {
     container.innerHTML = `
-      <div class="min-h-screen flex items-center justify-center p-6">
-        <div class="text-center">
-          <h1 class="text-2xl font-bold text-primary mb-2">Tienda no encontrada</h1>
-          <p class="text-primary-light">La tienda "${slug}" no existe o no está disponible.</p>
+      <div class="min-h-screen flex items-center justify-center p-8">
+        <div class="empty-state animate-fade-in">
+          <div class="empty-state-icon"><i data-lucide="store-x"></i></div>
+          <h3>Tienda no encontrada</h3>
+          <p>La tienda "${slug}" no existe o no está disponible.</p>
         </div>
       </div>
     `;
+    if (window.lucide) lucide.createIcons();
   }
 }
 
 function renderLogin(container, slug, tienda) {
   container.innerHTML = `
-    <div class="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
-      <div class="text-center mb-6">
-        <h1 class="text-2xl font-bold text-primary">${tienda.nombre}</h1>
-        ${tienda.direccion ? `<p class="text-sm text-primary-light mt-1">${tienda.direccion}</p>` : ''}
-      </div>
-      <div class="card w-full max-w-sm">
-        <h2 class="text-lg font-bold text-primary mb-4">Bienvenido</h2>
-        <p class="text-sm text-primary-light mb-4">Ingresa tus datos para hacer pedidos</p>
-        <div class="mb-3">
-          <label class="block text-sm font-medium text-primary mb-1">Tu nombre</label>
-          <input type="text" id="login-nombre" placeholder="Ej: María" class="input-field" />
+    <div class="min-h-screen bg-surface flex flex-col items-center justify-center p-8">
+      <div class="w-full max-w-sm animate-fade-in">
+        <div class="text-center mb-8">
+          <div class="w-16 h-16 rounded-[20px] bg-primary mx-auto mb-4 flex items-center justify-center">
+            <i data-lucide="store" class="w-8 h-8 text-accent"></i>
+          </div>
+          <h1 class="text-2xl font-bold text-primary">${tienda.nombre}</h1>
+          ${tienda.direccion ? `<p class="text-sm text-text-secondary mt-1 flex items-center justify-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i> ${tienda.direccion}</p>` : ''}
         </div>
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-primary mb-1">Teléfono</label>
-          <input type="tel" id="login-telefono" placeholder="Ej: 555-123-4567" class="input-field" />
+        <div class="card-elevated">
+          <h2 class="text-lg font-bold text-primary mb-1">Bienvenido</h2>
+          <p class="text-sm text-text-secondary mb-5">Ingresa tus datos para hacer pedidos</p>
+          <div class="mb-3">
+            <input type="text" id="login-nombre" placeholder="Tu nombre" class="input-field" />
+          </div>
+          <div class="mb-5">
+            <input type="tel" id="login-telefono" placeholder="Tu teléfono" class="input-field" />
+          </div>
+          <button id="btn-login" class="btn-accent w-full">
+            <i data-lucide="log-in" class="w-5 h-5"></i> Entrar
+          </button>
         </div>
-        <button id="btn-login" class="btn-accent w-full font-bold text-lg py-3">Entrar</button>
       </div>
     </div>
   `;
+
+  if (window.lucide) lucide.createIcons();
 
   container.querySelector('#btn-login').addEventListener('click', async () => {
     const nombre = container.querySelector('#login-nombre').value.trim();
@@ -87,49 +108,48 @@ function renderLogin(container, slug, tienda) {
 
 function renderApp(container, slug, tienda, cliente) {
   container.innerHTML = `
-    <div class="min-h-screen bg-surface pb-20">
-      <header class="bg-primary text-white p-4 sticky top-0 z-10 flex justify-between items-center">
+    <div class="min-h-screen bg-surface" style="padding-bottom:5.5rem">
+      <div class="header-primary flex justify-between items-center">
         <div>
           <h1 class="text-xl font-bold">${tienda.nombre}</h1>
-          ${tienda.direccion ? `<p class="text-xs text-accent opacity-80">${tienda.direccion}</p>` : ''}
+          ${tienda.direccion ? `<p class="text-xs text-accent/80 mt-0.5 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> ${tienda.direccion}</p>` : ''}
         </div>
-        <span class="text-sm text-accent">${cliente.nombre}</span>
-      </header>
+        <span class="badge badge-accent">${cliente.nombre}</span>
+      </div>
 
-      <main id="client-content"></main>
+      <main id="client-content" style="margin-top:-8px"></main>
 
-      <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20">
-        <div class="flex justify-around max-w-lg mx-auto">
-          <button data-tab="menu" class="tab-btn flex flex-col items-center py-2 px-4 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-            <span class="text-xs mt-1">Menú</span>
+      <div class="bottom-nav">
+        <div class="nav-items">
+          <button data-tab="menu" class="nav-item active">
+            <i data-lucide="utensils"></i>
+            <span>Menú</span>
           </button>
-          <button data-tab="pedidos" class="tab-btn flex flex-col items-center py-2 px-4 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-            <span class="text-xs mt-1">Mis Pedidos</span>
+          <button data-tab="pedidos" class="nav-item">
+            <i data-lucide="clipboard-list"></i>
+            <span>Mis Pedidos</span>
           </button>
-          <button data-tab="cuenta" class="tab-btn flex flex-col items-center py-2 px-4 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-            <span class="text-xs mt-1">Mi Cuenta</span>
+          <button data-tab="cuenta" class="nav-item">
+            <i data-lucide="user"></i>
+            <span>Mi Cuenta</span>
           </button>
         </div>
-      </nav>
+      </div>
     </div>
   `;
 
+  if (window.lucide) lucide.createIcons();
+
   let currentTab = 'menu';
   let carrito = {};
-  let productos = [];
 
   function switchTab(tab) {
     currentTab = tab;
-    container.querySelectorAll('.tab-btn').forEach(btn => {
+    container.querySelectorAll('.nav-item').forEach(btn => {
       if (btn.dataset.tab === tab) {
-        btn.classList.add('text-primary', 'font-semibold');
-        btn.classList.remove('text-primary-light');
+        btn.classList.add('active');
       } else {
-        btn.classList.remove('text-primary', 'font-semibold');
-        btn.classList.add('text-primary-light');
+        btn.classList.remove('active');
       }
     });
 
@@ -139,7 +159,7 @@ function renderApp(container, slug, tienda, cliente) {
     else if (tab === 'cuenta') renderCuentaTab(container, slug, tienda, cliente);
   }
 
-  container.querySelectorAll('.tab-btn').forEach(btn => {
+  container.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
@@ -147,70 +167,114 @@ function renderApp(container, slug, tienda, cliente) {
 }
 
 function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
-  content.innerHTML = `<p class="text-center text-primary-light py-8">Cargando menú...</p>`;
+  content.innerHTML = `
+    <div class="page-padding">
+      <div class="space-y-3">
+        <div class="skeleton h-24 w-full"></div>
+        <div class="skeleton h-24 w-full"></div>
+      </div>
+    </div>
+  `;
 
   api.public.getMenu(slug).then(productos => {
     if (productos.length === 0) {
-      content.innerHTML = `<p class="text-center text-primary-light py-8">Esta tienda aún no tiene productos</p>`;
+      content.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon"><i data-lucide="utensils-crossed"></i></div>
+          <h3>Sin productos</h3>
+          <p>Esta tienda aún no tiene productos en su menú</p>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
       return;
     }
 
     content.innerHTML = `
-      <div class="p-4 space-y-3">
-        ${productos.map(p => `
-          <div class="card flex justify-between items-center" data-id="${p.id}" data-nombre="${p.nombre}" data-precio="${p.precio}">
-            <div class="flex-1 mr-3">
-              <h3 class="font-semibold text-primary">${p.nombre}</h3>
-              ${p.descripcion ? `<p class="text-sm text-primary-light">${p.descripcion}</p>` : ''}
-            </div>
-            <div class="text-right">
-              <span class="text-accent font-bold text-lg">$${p.precio.toFixed(2)}</span>
-              <div class="flex items-center gap-2 mt-1">
-                <button class="qty-btn minus w-7 h-7 rounded-full bg-primary text-white font-bold text-sm">-</button>
-                <span class="qty-value w-6 text-center font-semibold">${carrito[p.id]?.cantidad || 0}</span>
-                <button class="qty-btn plus w-7 h-7 rounded-full bg-primary text-white font-bold text-sm">+</button>
+      <div class="page-padding page-padding-bottom" style="padding-bottom:8rem">
+        <div class="space-y-3">
+          ${productos.map((p, i) => {
+            const agotado = p.tieneInventario && (p.stock ?? 0) <= 0;
+            return `
+                  <div class="card animate-fade-in" style="animation-delay:${i * 30}ms" data-product-id="${p.id}" data-nombre="${p.nombre}" data-precio="${p.precio}" ${agotado ? 'data-agotado="1"' : ''}>
+                    <div class="flex-1 mr-4">
+                      <h3 class="font-semibold text-primary text-[0.9375rem]">${p.nombre}</h3>
+                      ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5 leading-relaxed">${p.descripcion}</p>` : ''}
+                      <div class="flex flex-wrap items-center gap-2 mt-2">
+                        <span class="inline-block font-bold text-accent text-lg">$${p.precio.toFixed(2)}</span>
+                        ${p.tieneInventario
+                          ? `<span class="badge ${agotado ? 'bg-error/10 text-error' : 'bg-surface text-text-secondary'}">
+                              ${agotado ? '<i data-lucide="package-x" class="w-3.5 h-3.5"></i> Agotado' : `<i data-lucide="package" class="w-3.5 h-3.5"></i> ${p.stock} disponibles`}
+                            </span>`
+                          : ''}
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                      <div class="flex items-center gap-2 ${agotado ? 'opacity-40 pointer-events-none' : ''}">
+                    <button class="qty-btn minus" data-id="${p.id}">
+                      <i data-lucide="minus" class="w-4 h-4"></i>
+                    </button>
+                    <span class="qty-value w-8 text-center font-bold text-primary text-[0.9375rem]">${carrito[p.id]?.cantidad || 0}</span>
+                    <button class="qty-btn plus" data-id="${p.id}">
+                      <i data-lucide="plus" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        `).join('')}
+          `; }).join('')}
+        </div>
       </div>
 
-      <div id="carrito-bar" class="fixed bottom-16 left-0 right-0 bg-primary text-white p-4 hidden z-10 max-w-lg mx-auto">
-        <div class="flex justify-between items-center mb-2">
-          <span class="font-semibold">Tu pedido</span>
-          <span id="carrito-count" class="text-accent font-bold">0 items</span>
+      <div id="carrito-bar" class="hidden" style="position:fixed;bottom:5.5rem;left:12px;right:12px;z-index:40;max-width:420px;margin:0 auto">
+        <div class="card-elevated" style="padding:1rem 1.25rem">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="font-semibold text-primary text-sm">Tu pedido</span>
+            <span id="carrito-count" class="badge badge-accent">0 items</span>
+          </div>
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-text-secondary text-sm">Total</span>
+            <span id="carrito-total" class="font-bold text-accent text-xl">$0.00</span>
+          </div>
+          <button id="btn-hacer-pedido" class="btn-accent w-full">
+            <i data-lucide="shopping-bag" class="w-5 h-5"></i> Hacer Pedido
+          </button>
         </div>
-        <div class="flex justify-between items-center mb-3">
-          <span>Total:</span>
-          <span id="carrito-total" class="text-accent font-bold text-xl">$0.00</span>
-        </div>
-        <button id="btn-hacer-pedido" class="btn-accent w-full text-lg py-3 font-bold">Hacer Pedido</button>
       </div>
 
-      <div id="modal-pedido" class="fixed inset-0 bg-black/50 z-30 hidden flex items-end justify-center">
-        <div class="bg-white rounded-t-2xl w-full max-w-lg p-6">
-          <h2 class="text-lg font-bold text-primary mb-4">Tu Pedido</h2>
-          <div id="resumen-pedido" class="space-y-2 mb-4"></div>
+      <div id="modal-pedido" class="modal-overlay hidden">
+        <div class="modal-sheet">
+          <div class="flex justify-between items-center mb-5">
+            <h2 class="text-lg font-bold text-primary">Tu Pedido</h2>
+            <button id="btn-cancelar" class="btn-icon bg-surface">
+              <i data-lucide="x" class="w-5 h-5 text-text-secondary"></i>
+            </button>
+          </div>
+          <div id="resumen-pedido" class="space-y-2 mb-5"></div>
           <div class="mb-4">
-            <label class="block text-sm font-medium text-primary mb-1">Forma de pago</label>
-            <select id="forma-pago" class="input-field">
-              <option value="Efectivo">Efectivo</option>
-              <option value="Transferencia">Transferencia</option>
-              <option value="Fiado">Fiado</option>
-            </select>
+            <label class="block text-sm font-medium text-primary mb-2">Forma de pago</label>
+            <div class="flex gap-2">
+              <button type="button" class="chip active pay-option" data-value="Efectivo">
+                <i data-lucide="banknote" class="w-4 h-4"></i> Efectivo
+              </button>
+              <button type="button" class="chip pay-option" data-value="Transferencia">
+                <i data-lucide="smartphone" class="w-4 h-4"></i> Transferencia
+              </button>
+              <button type="button" class="chip pay-option" data-value="Fiado">
+                <i data-lucide="clock" class="w-4 h-4"></i> Fiado
+              </button>
+            </div>
           </div>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-primary mb-1">Observaciones (opcional)</label>
-            <textarea id="observaciones" placeholder="Ej: Sin cebolla, extra salsa..." class="input-field" rows="2"></textarea>
+          <div class="mb-5">
+            <textarea id="observaciones" placeholder="Alguna nota? Ej: Sin cebolla..." class="input-field" rows="2" style="resize:none"></textarea>
           </div>
-          <div class="flex gap-2">
-            <button id="btn-cancelar" class="btn-primary flex-1">Cancelar</button>
-            <button id="btn-confirmar" class="btn-accent flex-1 font-bold">Confirmar</button>
-          </div>
+          <button id="btn-confirmar" class="btn-primary w-full">
+            <i data-lucide="check" class="w-5 h-5"></i> Confirmar Pedido
+          </button>
         </div>
       </div>
     `;
 
+    if (window.lucide) lucide.createIcons();
     setupCarrito(content, slug, cliente, carrito, updateCarrito);
   });
 }
@@ -218,8 +282,8 @@ function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
 function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
   content.querySelectorAll('.qty-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const card = btn.closest('[data-id]');
-      const id = card.dataset.id;
+      const card = btn.closest('[data-product-id]');
+      const id = card.dataset.productId;
       const nombre = card.dataset.nombre;
       const precio = parseFloat(card.dataset.precio);
       const qtyEl = card.querySelector('.qty-value');
@@ -258,6 +322,13 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
     modal.classList.add('hidden');
   });
 
+  content.querySelectorAll('.pay-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      content.querySelectorAll('.pay-option').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
   btnConfirmar?.addEventListener('click', async () => {
     const items = Object.values(carrito).map(c => ({
       productoId: parseInt(c.id),
@@ -266,13 +337,13 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
 
     if (items.length === 0) return;
 
-    const formaPago = content.querySelector('#forma-pago').value;
+    const activePay = content.querySelector('.pay-option.active');
+    const formaPago = activePay ? activePay.dataset.value : 'Efectivo';
     const observaciones = content.querySelector('#observaciones').value;
 
     try {
       await api.public.crearPedido(slug, {
-        clienteId: cliente.id,
-        clienteNombre: cliente.nombre,
+        telefonoCliente: cliente.telefono,
         formaPago,
         observaciones: observaciones || null,
         items
@@ -280,15 +351,20 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
 
       modal.classList.add('hidden');
       content.innerHTML = `
-        <div class="min-h-screen flex items-center justify-center p-6">
-          <div class="text-center">
-            <div class="text-6xl mb-4">✓</div>
+        <div class="min-h-screen flex items-center justify-center p-8">
+          <div class="text-center animate-scale-in">
+            <div class="w-20 h-20 rounded-full bg-success/15 mx-auto mb-5 flex items-center justify-center">
+              <i data-lucide="check" class="w-10 h-10 text-success"></i>
+            </div>
             <h1 class="text-2xl font-bold text-primary mb-2">¡Pedido Enviado!</h1>
-            <p class="text-primary-light mb-6">Tu pedido ha sido enviado a la tienda. Espera confirmación.</p>
-            <button id="btn-volver-menu" class="btn-primary">Volver al Menú</button>
+            <p class="text-text-secondary mb-8 leading-relaxed">Tu pedido ha sido enviado a la tienda.<br>Espera confirmación.</p>
+            <button id="btn-volver-menu" class="btn-primary">
+              <i data-lucide="utensils" class="w-5 h-5"></i> Volver al Menú
+            </button>
           </div>
         </div>
       `;
+      if (window.lucide) lucide.createIcons();
       content.querySelector('#btn-volver-menu').addEventListener('click', () => {
         Object.keys(carrito).forEach(k => delete carrito[k]);
         updateCarrito(carrito);
@@ -328,12 +404,12 @@ function mostrarResumen(content, carrito) {
   const total = items.reduce((sum, c) => sum + (c.precio * c.cantidad), 0);
 
   resumen.innerHTML = items.map(c => `
-    <div class="flex justify-between text-sm">
-      <span>${c.nombre} x${c.cantidad}</span>
-      <span class="font-semibold">$${(c.precio * c.cantidad).toFixed(2)}</span>
+    <div class="flex justify-between text-sm py-1">
+      <span class="text-primary">${c.nombre} <span class="text-text-secondary">×${c.cantidad}</span></span>
+      <span class="font-semibold text-primary">$${(c.precio * c.cantidad).toFixed(2)}</span>
     </div>
   `).join('') + `
-    <div class="flex justify-between font-bold text-primary border-t pt-2 mt-2">
+    <div class="flex justify-between font-bold text-primary mt-3 pt-3" style="border-top:1px solid #eeece8">
       <span>Total</span>
       <span class="text-accent text-lg">$${total.toFixed(2)}</span>
     </div>
@@ -341,107 +417,126 @@ function mostrarResumen(content, carrito) {
 }
 
 function renderPedidosTab(content, slug, cliente) {
-  content.innerHTML = `<p class="text-center text-primary-light py-8">Cargando pedidos...</p>`;
+  content.innerHTML = `
+    <div class="page-padding">
+      <div class="space-y-3">
+        <div class="skeleton h-28 w-full"></div>
+        <div class="skeleton h-28 w-full"></div>
+      </div>
+    </div>
+  `;
 
   api.public.getPedidosCliente(slug, cliente.telefono).then(pedidos => {
     if (pedidos.length === 0) {
       content.innerHTML = `
-        <div class="p-4 text-center">
-          <div class="text-4xl mb-3">📋</div>
-          <h2 class="text-lg font-bold text-primary mb-1">Sin pedidos aún</h2>
-          <p class="text-sm text-primary-light">Tus pedidos aparecerán aquí cuando hagas uno.</p>
+        <div class="empty-state">
+          <div class="empty-state-icon"><i data-lucide="clipboard-list"></i></div>
+          <h3>Sin pedidos aún</h3>
+          <p>Tus pedidos aparecerán aquí cuando hagas uno</p>
         </div>
       `;
+      if (window.lucide) lucide.createIcons();
       return;
     }
 
     const activos = pedidos.filter(p => p.estado !== 'Entregado' && p.estado !== 'Cancelado');
     const historial = pedidos.filter(p => p.estado === 'Entregado' || p.estado === 'Cancelado');
 
-    const estadoColor = (estado) => {
+    const estadoBadge = (estado) => {
       switch (estado) {
-        case 'Recibido': return 'bg-blue-100 text-blue-700';
-        case 'Confirmado': return 'bg-yellow-100 text-yellow-700';
-        case 'Preparando': return 'bg-orange-100 text-orange-700';
-        case 'Listo': return 'bg-green-100 text-green-700';
-        case 'Entregado': return 'bg-gray-100 text-gray-500';
-        case 'Cancelado': return 'bg-red-100 text-red-700';
-        default: return 'bg-gray-100 text-gray-500';
+        case 'Recibido': return 'badge-info';
+        case 'Confirmado': return 'badge-warning';
+        case 'Preparando': case 'EnPreparacion': return 'badge-warning';
+        case 'Listo': return 'badge-success';
+        case 'Entregado': return 'badge-info';
+        case 'Cancelado': return 'badge-error';
+        default: return 'badge-info';
       }
     };
 
     const renderPedidoCard = (p) => `
-      <div class="card mb-3">
-        <div class="flex justify-between items-start mb-2">
-          <span class="text-xs text-primary-light">#${p.id}</span>
-          <span class="text-xs px-2 py-0.5 rounded-full font-medium ${estadoColor(p.estado)}">${p.estado}</span>
+      <div class="card animate-fade-in">
+        <div class="flex justify-between items-start mb-3">
+          <span class="text-[0.8125rem] text-text-secondary flex items-center gap-1">
+            <i data-lucide="hash" class="w-3.5 h-3.5"></i> ${p.id}
+          </span>
+          <span class="badge ${estadoBadge(p.estado)}">${p.estado}</span>
         </div>
-        <div class="space-y-1 mb-2">
+        <div class="space-y-1.5 mb-3">
           ${p.items.map(i => `
             <div class="flex justify-between text-sm">
-              <span>${i.productoNombre} x${i.cantidad}</span>
-              <span class="font-medium">$${i.subtotal.toFixed(2)}</span>
+              <span class="text-primary">${i.productoNombre} <span class="text-text-secondary">×${i.cantidad}</span></span>
+              <span class="font-medium text-primary">$${i.subtotal.toFixed(2)}</span>
             </div>
           `).join('')}
         </div>
-        <div class="flex justify-between items-center border-t pt-2">
-          <span class="text-xs text-primary-light">${formatDate(p.creadoEn)}</span>
+        <div class="flex justify-between items-center pt-3" style="border-top:1px solid #eeece8">
+          <span class="text-text-secondary text-[0.8125rem] flex items-center gap-1">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+            ${formatDate(p.creadoEn)}
+          </span>
           <span class="font-bold text-accent">$${p.total.toFixed(2)}</span>
         </div>
-        ${p.observaciones ? `<p class="text-xs text-primary-light mt-2 italic">📝 ${p.observaciones}</p>` : ''}
+        ${p.observaciones ? `<p class="text-[0.8125rem] text-text-secondary mt-2.5 italic flex items-center gap-1"><i data-lucide="message-square" class="w-3.5 h-3.5"></i> ${p.observaciones}</p>` : ''}
       </div>
     `;
 
     content.innerHTML = `
-      <div class="p-4">
+      <div class="page-padding">
         ${activos.length > 0 ? `
-          <h2 class="text-sm font-bold text-primary-light uppercase tracking-wide mb-3">Activos</h2>
-          ${activos.map(renderPedidoCard).join('')}
+          <p class="section-title">Activos</p>
+          <div class="space-y-3 mb-6">${activos.map(renderPedidoCard).join('')}</div>
         ` : ''}
         ${historial.length > 0 ? `
-          <h2 class="text-sm font-bold text-primary-light uppercase tracking-wide mb-3 mt-6">Historial</h2>
-          ${historial.map(renderPedidoCard).join('')}
-        ` : ''}
-        ${activos.length === 0 && historial.length === 0 ? `
-          <div class="text-center">
-            <div class="text-4xl mb-3">📋</div>
-            <h2 class="text-lg font-bold text-primary mb-1">Sin pedidos aún</h2>
-            <p class="text-sm text-primary-light">Tus pedidos aparecerán aquí cuando hagas uno.</p>
-          </div>
+          <p class="section-title">Historial</p>
+          <div class="space-y-3">${historial.map(renderPedidoCard).join('')}</div>
         ` : ''}
       </div>
     `;
+    if (window.lucide) lucide.createIcons();
   }).catch(() => {
-    content.innerHTML = `<p class="text-center text-primary-light py-8">Error al cargar pedidos</p>`;
+    content.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon"><i data-lucide="alert-circle"></i></div>
+        <h3>Error</h3>
+        <p>No se pudieron cargar tus pedidos</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
   });
 }
 
 function renderCuentaTab(container, slug, tienda, cliente) {
   const content = container.querySelector('#client-content');
   content.innerHTML = `
-    <div class="p-4">
-      <div class="card mb-4">
-        <h2 class="text-lg font-bold text-primary mb-3">Mi Cuenta</h2>
-        <div class="space-y-2">
-          <div>
-            <label class="text-xs text-primary-light">Nombre</label>
-            <p class="font-medium text-primary">${cliente.nombre}</p>
+    <div class="page-padding">
+      <div class="card-elevated mb-4 animate-fade-in">
+        <div class="flex items-center gap-4 mb-5">
+          <div class="w-14 h-14 rounded-[18px] bg-primary/10 flex items-center justify-center">
+            <span class="text-xl font-bold text-primary">${cliente.nombre.charAt(0).toUpperCase()}</span>
           </div>
           <div>
-            <label class="text-xs text-primary-light">Teléfono</label>
-            <p class="font-medium text-primary">${cliente.telefono}</p>
+            <h2 class="text-lg font-bold text-primary">${cliente.nombre}</h2>
+            <p class="text-sm text-text-secondary flex items-center gap-1"><i data-lucide="phone" class="w-3.5 h-3.5"></i> ${cliente.telefono}</p>
           </div>
-          <div>
-            <label class="text-xs text-primary-light">Tienda</label>
-            <p class="font-medium text-primary">${tienda.nombre}</p>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center gap-3 p-3 rounded-2xl bg-surface">
+            <i data-lucide="store" class="w-5 h-5 text-accent"></i>
+            <div>
+              <p class="text-[0.8125rem] text-text-secondary">Tienda</p>
+              <p class="font-medium text-primary text-sm">${tienda.nombre}</p>
+            </div>
           </div>
         </div>
       </div>
-      <button id="btn-logout" class="w-full bg-red-50 text-red-600 py-3 rounded-lg font-medium hover:bg-red-100 transition">
-        Cambiar de cuenta
+      <button id="btn-logout" class="btn-danger w-full justify-center">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Cambiar de cuenta
       </button>
     </div>
   `;
+
+  if (window.lucide) lucide.createIcons();
 
   content.querySelector('#btn-logout').addEventListener('click', () => {
     removeClient(slug);

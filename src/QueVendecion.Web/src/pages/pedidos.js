@@ -2,19 +2,43 @@ import { api } from '../utils/api.js';
 import { getAuth, clearAuth } from '../utils/auth.js';
 import { navigate } from '../utils/router.js';
 
-const ESTADO_COLORS = {
-  Recibido: 'bg-yellow-100 text-yellow-800',
-  EnPreparacion: 'bg-blue-100 text-blue-800',
-  Listo: 'bg-green-100 text-green-800',
-  Entregado: 'bg-gray-100 text-gray-800',
-  Cancelado: 'bg-red-100 text-red-800'
+const ESTADO_BADGE = {
+  Recibido: 'badge-info',
+  Confirmado: 'badge-warning',
+  EnPreparacion: 'badge-warning',
+  Preparando: 'badge-warning',
+  Listo: 'badge-success',
+  Entregado: 'badge-info',
+  Cancelado: 'badge-error'
 };
 
 const ESTADO_SIGUIENTE = {
-  Recibido: 'EnPreparacion',
+  Recibido: 'Confirmado',
+  Confirmado: 'EnPreparacion',
   EnPreparacion: 'Listo',
+  Preparando: 'Listo',
   Listo: 'Entregado'
 };
+
+function renderAdminNav(active) {
+  const items = [
+    { href: '/pedidos', icon: 'clipboard-list', label: 'Pedidos', id: 'pedidos' },
+    { href: '/menu', icon: 'utensils', label: 'Menú', id: 'menu' },
+    { href: '/mi-tienda', icon: 'store', label: 'Tienda', id: 'tienda' },
+  ];
+  return `
+    <div class="bottom-nav">
+      <div class="nav-items">
+        ${items.map(i => `
+          <a href="${i.href}" data-link class="nav-item ${i.id === active ? 'active' : ''}">
+            <i data-lucide="${i.icon}"></i>
+            <span>${i.label}</span>
+          </a>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
 
 export function renderPedidos(container, params) {
   const auth = getAuth();
@@ -24,46 +48,38 @@ export function renderPedidos(container, params) {
   }
 
   container.innerHTML = `
-    <div class="min-h-screen bg-surface pb-20">
-      <header class="bg-primary text-white p-4 flex justify-between items-center">
-        <h1 class="text-xl font-bold">Pedidos</h1>
-        <button id="btn-logout" class="text-sm text-accent hover:underline">Salir</button>
-      </header>
-      <main class="p-4">
-        <div class="flex gap-2 mb-4 overflow-x-auto">
-          <button class="filter-btn btn-primary text-sm px-3 py-1 whitespace-nowrap" data-estado="">Todos</button>
-          <button class="filter-btn btn-accent text-sm px-3 py-1 whitespace-nowrap" data-estado="Recibido">Recibidos</button>
-          <button class="filter-btn btn-accent text-sm px-3 py-1 whitespace-nowrap" data-estado="EnPreparacion">En Preparación</button>
-          <button class="filter-btn btn-accent text-sm px-3 py-1 whitespace-nowrap" data-estado="Listo">Listos</button>
+    <div class="min-h-screen bg-surface page-padding-bottom">
+      <div class="header-primary flex justify-between items-center">
+        <div>
+          <p class="text-accent text-[0.8125rem] font-medium">Mi Tienda</p>
+          <h1 class="text-xl font-bold mt-0.5">Pedidos</h1>
+        </div>
+        <button id="btn-logout" class="btn-icon bg-white/10 text-white/80 hover:bg-white/20">
+          <i data-lucide="log-out" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <main class="page-padding page-padding-bottom" style="margin-top:-8px">
+        <div class="flex gap-2 mb-5 overflow-x-auto pb-1 -mx-1 px-1">
+          <button class="chip active" data-estado="">Todos</button>
+          <button class="chip" data-estado="Recibido">Recibidos</button>
+          <button class="chip" data-estado="Confirmado">Confirmados</button>
+          <button class="chip" data-estado="EnPreparacion">En Preparación</button>
+          <button class="chip" data-estado="Listo">Listos</button>
+          <button class="chip" data-estado="Entregado">Entregados</button>
+          <button class="chip" data-estado="Cancelado">Cancelados</button>
         </div>
         <div id="pedidos-list" class="space-y-3">
-          <p class="text-center text-primary-light py-8">Cargando pedidos...</p>
+          <div class="space-y-3">
+            <div class="skeleton h-32 w-full"></div>
+            <div class="skeleton h-32 w-full"></div>
+          </div>
         </div>
       </main>
-      <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-2">
-        <div class="flex justify-around">
-          <a href="/pedidos" data-link class="flex flex-col items-center p-2 text-accent">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-            </svg>
-            <span class="text-xs">Pedidos</span>
-          </a>
-          <a href="/menu" data-link class="flex flex-col items-center p-2 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-            </svg>
-            <span class="text-xs">Menú</span>
-          </a>
-          <a href="/mi-tienda" data-link class="flex flex-col items-center p-2 text-primary-light">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-            </svg>
-            <span class="text-xs">Tienda</span>
-          </a>
-        </div>
-      </nav>
+      ${renderAdminNav('pedidos')}
     </div>
   `;
+
+  if (window.lucide) lucide.createIcons();
 
   container.querySelector('#btn-logout').addEventListener('click', () => {
     clearAuth();
@@ -71,11 +87,11 @@ export function renderPedidos(container, params) {
   });
 
   let filtroActual = '';
-  const filterBtns = container.querySelectorAll('.filter-btn');
+  const filterBtns = container.querySelectorAll('.chip');
   filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      filterBtns.forEach(b => b.className = 'filter-btn btn-accent text-sm px-3 py-1 whitespace-nowrap');
-      btn.className = 'filter-btn btn-primary text-sm px-3 py-1 whitespace-nowrap';
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
       filtroActual = btn.dataset.estado;
       loadPedidos(container.querySelector('#pedidos-list'), filtroActual);
     });
@@ -89,41 +105,61 @@ async function loadPedidos(container, estado) {
     const pedidos = await api.pedidos.getMisPedidos(estado || undefined);
 
     if (pedidos.length === 0) {
-      container.innerHTML = `<p class="text-center text-primary-light py-8">No hay pedidos${estado ? ' con este filtro' : ''}</p>`;
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon"><i data-lucide="inbox"></i></div>
+          <h3>Sin pedidos</h3>
+          <p>${estado ? 'No hay pedidos con este filtro' : 'Cuando llegue un pedido, aparecerá aquí'}</p>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
       return;
     }
 
-    container.innerHTML = pedidos.map(p => `
-      <div class="card" data-id="${p.id}">
-        <div class="flex justify-between items-start mb-2">
-          <div>
-            <span class="font-bold text-primary">#${p.id}</span>
-            ${p.clienteNombre ? `<span class="text-primary-light ml-2">${p.clienteNombre}</span>` : ''}
+    container.innerHTML = pedidos.map((p, i) => `
+      <div class="card animate-fade-in" style="animation-delay:${i * 40}ms" data-id="${p.id}">
+        <div class="flex justify-between items-start mb-3">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-primary text-[0.9375rem]">#${p.id}</span>
+            ${p.clienteNombre ? `<span class="text-text-secondary text-sm">${p.clienteNombre}</span>` : ''}
           </div>
-          <span class="text-xs px-2 py-1 rounded-full ${ESTADO_COLORS[p.estado] || 'bg-gray-100'}">${p.estado}</span>
+          <span class="badge ${ESTADO_BADGE[p.estado] || 'badge-info'}">${p.estado}</span>
         </div>
-        <div class="text-sm text-primary-light mb-2">
-          ${p.items.map(i => `${i.productoNombre} x${i.cantidad}`).join(', ')}
+        <div class="flex flex-wrap gap-1.5 mb-3">
+          ${p.items.map(i => `
+            <span class="chip text-[0.75rem] py-1 px-2.5" style="cursor:default">${i.productoNombre} ×${i.cantidad}</span>
+          `).join('')}
         </div>
-        <div class="flex justify-between items-center text-sm">
-          <span class="text-accent font-bold">$${p.total.toFixed(2)}</span>
-          <span class="text-primary-light">${p.formaPago} · ${new Date(p.creadoEn).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+        <div class="flex justify-between items-center mb-3">
+          <span class="font-bold text-accent text-lg">$${p.total.toFixed(2)}</span>
+          <span class="text-text-secondary text-[0.8125rem] flex items-center gap-1">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+            ${p.formaPago} · ${new Date(p.creadoEn).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
-        <div class="flex gap-2 mt-3">
+        <div class="flex gap-2">
           ${ESTADO_SIGUIENTE[p.estado] ? `
-            <button class="btn-avanzar btn-accent flex-1 text-sm" data-id="${p.id}" data-estado="${ESTADO_SIGUIENTE[p.estado]}">
-              → ${ESTADO_SIGUIENTE[p.estado]}
+            <button class="btn-accent flex-1 text-sm btn-avanzar" data-id="${p.id}" data-estado="${ESTADO_SIGUIENTE[p.estado]}">
+              <i data-lucide="arrow-right" class="w-4 h-4"></i> ${ESTADO_SIGUIENTE[p.estado]}
             </button>
           ` : ''}
           ${p.estado !== 'Cancelado' && p.estado !== 'Entregado' ? `
-            <button class="btn-cancelar-pedido text-red-400 hover:text-red-600 text-sm px-3" data-id="${p.id}">Cancelar</button>
+            <button class="btn-danger text-sm btn-cancelar-pedido" data-id="${p.id}">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
           ` : ''}
           ${p.estadoPago === 'Pendiente' ? `
-            <button class="btn-pagar text-green-600 hover:text-green-800 text-sm px-3" data-id="${p.id}">Marcar Pagado</button>
-          ` : `<span class="text-xs text-green-600">✓ Pagado</span>`}
+            <button class="btn-success text-sm btn-pagar" data-id="${p.id}">
+              <i data-lucide="check-circle" class="w-4 h-4"></i> Pagado
+            </button>
+          ` : `
+            <span class="badge badge-success flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Pagado</span>
+          `}
         </div>
       </div>
     `).join('');
+
+    if (window.lucide) lucide.createIcons();
 
     container.querySelectorAll('.btn-avanzar').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -148,6 +184,13 @@ async function loadPedidos(container, estado) {
       });
     });
   } catch (error) {
-    container.innerHTML = `<p class="text-center text-red-500 py-8">Error al cargar pedidos</p>`;
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon"><i data-lucide="alert-circle"></i></div>
+        <h3>Error</h3>
+        <p>No se pudieron cargar los pedidos</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
   }
 }
