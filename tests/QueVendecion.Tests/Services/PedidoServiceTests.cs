@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using QueVendecion.Application.DTOs;
 using QueVendecion.Domain.Entities;
 using QueVendecion.Domain.Enums;
@@ -31,7 +32,7 @@ public class PedidoServiceTests : IDisposable
 
     private async Task<Producto> SeedProducto(int tiendaId, string nombre = "Hamburguesa", decimal precio = 85m)
     {
-        var producto = new Producto { TiendaId = tiendaId, Nombre = nombre, Precio = precio };
+        var producto = new Producto { TiendaId = tiendaId, Nombre = nombre, Precio = precio, EntregaPermitida = EntregaProducto.Ambas };
         _context.Productos.Add(producto);
         await _context.SaveChangesAsync();
         return producto;
@@ -146,6 +147,8 @@ public class PedidoServiceTests : IDisposable
         var filtrados = await _service.ObtenerPorTiendaAsync(tienda.Id, EstadoPedido.Recibido);
         Assert.Equal(2, filtrados.Count);
 
+        await _service.ActualizarEstadoAsync(todos[0].Id, EstadoPedido.Confirmado);
+        await _service.ActualizarEstadoAsync(todos[0].Id, EstadoPedido.EnPreparacion);
         await _service.ActualizarEstadoAsync(todos[0].Id, EstadoPedido.Listo);
         var listos = await _service.ObtenerPorTiendaAsync(tienda.Id, EstadoPedido.Listo);
         Assert.Single(listos);
@@ -194,6 +197,8 @@ public class PedidoServiceTests : IDisposable
             Items = new() { new() { ProductoId = prod.Id, Cantidad = 1 } }
         });
 
+        await _service.ActualizarEstadoAsync(pedido.Id, EstadoPedido.Confirmado);
+        await _service.ActualizarEstadoAsync(pedido.Id, EstadoPedido.EnPreparacion);
         var actualizado = await _service.ActualizarEstadoAsync(pedido.Id, EstadoPedido.Listo);
 
         Assert.NotNull(actualizado);
@@ -256,5 +261,36 @@ public class PedidoServiceTests : IDisposable
     {
         var resultado = await _service.ObtenerPorIdAsync(999);
         Assert.Null(resultado);
+    }
+
+    [Fact]
+    public async Task SQLite_SerializaInstantesDePedidoYHistorialComoUtcTrasReleer()
+    {
+        var tienda = await SeedTienda();
+        var producto = await SeedProducto(tienda.Id);
+        var creado = await _service.CrearAsync(new CrearPedidoDto
+        {
+            TiendaId = tienda.Id,
+            Items = new() { new() { ProductoId = producto.Id, Cantidad = 1 } }
+        });
+        var instante = new DateTime(2026, 10, 22, 5, 11, 0, DateTimeKind.Utc);
+        var pedido = await _context.Pedidos.FindAsync(creado.Id);
+        Assert.NotNull(pedido);
+        pedido.CreadoEn = instante;
+        pedido.ActualizadoEn = instante.AddMinutes(10);
+        pedido.HistorialEstadosJson = JsonSerializer.Serialize(new[]
+        {
+            new CambioEstadoPedidoDto { Nuevo = EstadoPedido.Recibido, FechaUtc = instante }
+        });
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var releido = await _service.ObtenerPorIdAsync(creado.Id);
+        Assert.NotNull(releido);
+        Assert.Equal(DateTimeKind.Utc, releido.CreadoEn.Kind);
+        Assert.Equal(DateTimeKind.Utc, releido.ActualizadoEn!.Value.Kind);
+        Assert.Equal(DateTimeKind.Utc, releido.HistorialEstados[0].FechaUtc.Kind);
+        Assert.Equal("2026-10-22T05:11:00Z", JsonSerializer.Serialize(releido.CreadoEn).Trim('"'));
+        Assert.Equal("2026-10-22T05:11:00Z", JsonSerializer.Serialize(releido.HistorialEstados[0].FechaUtc).Trim('"'));
     }
 }

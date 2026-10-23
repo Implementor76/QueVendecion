@@ -40,6 +40,14 @@ public class TiendasController : ControllerBase
         return tienda;
     }
 
+    [HttpPut("mi-tienda/operacion")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<TiendaDto>> ActualizarOperacion([FromBody] OperacionTiendaDto dto)
+    {
+        var tienda = await _tiendaService.ActualizarOperacionAsync(GetTiendaId(), dto);
+        return tienda == null ? NotFound() : tienda;
+    }
+
     [HttpGet("mi-tienda/productos")]
     public async Task<ActionResult<List<ProductoDto>>> ObtenerMisProductos()
     {
@@ -47,12 +55,20 @@ public class TiendasController : ControllerBase
         return await _productoService.ObtenerPorTiendaAsync(tiendaId);
     }
 
+    [HttpGet("mi-tienda/productos/{id}")]
+    public async Task<ActionResult<ProductoDto>> ObtenerMiProducto(int id)
+    {
+        var producto = await _productoService.ObtenerPorIdAsync(id);
+        if (producto == null || producto.TiendaId != GetTiendaId()) return NotFound();
+        return producto;
+    }
+
     [HttpPost("mi-tienda/productos")]
     public async Task<ActionResult<ProductoDto>> CrearProducto([FromBody] CrearProductoDto dto)
     {
         var tiendaId = GetTiendaId();
         var producto = await _productoService.CrearAsync(tiendaId, dto);
-        return CreatedAtAction(nameof(CrearProducto), new { id = producto.Id }, producto);
+        return CreatedAtAction(nameof(ObtenerMiProducto), new { id = producto.Id }, producto);
     }
 
     [HttpPut("mi-tienda/productos/{id}")]

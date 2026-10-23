@@ -77,29 +77,66 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<QueVendecionDbContext>();
-    db.Database.EnsureCreated();
+    if (args.Contains("--upgrade-inventory"))
+    {
+        if (!app.Environment.IsDevelopment() || !db.Database.IsSqlite())
+            throw new InvalidOperationException("--upgrade-inventory solo está permitido con SQLite en Development. En producción aplica migraciones antes de iniciar la API.");
+        await InventarioSchemaUpgrade.AplicarAsync(db);
+        app.Logger.LogInformation("Esquema de inventario actualizado sin eliminar datos.");
+        return;
+    }
+    if (args.Contains("--upgrade-operation"))
+    {
+        if (!app.Environment.IsDevelopment() || !db.Database.IsSqlite())
+            throw new InvalidOperationException("--upgrade-operation solo está permitido con SQLite en Development.");
+        await OperacionSchemaUpgrade.AplicarAsync(db);
+        return;
+    }
+    if (app.Environment.IsDevelopment()) db.Database.EnsureCreated();
+    // Existing SQLite databases must be upgraded before EF queries the new fields.
+    if (app.Environment.IsDevelopment() && db.Database.IsSqlite())
+    {
+        await InventarioSchemaUpgrade.AplicarAsync(db);
+        await OperacionSchemaUpgrade.AplicarAsync(db);
+    }
+    else
+    {
+        if (db.Database.IsNpgsql() && (await db.Database.GetPendingMigrationsAsync()).Any())
+            throw new InvalidOperationException("Hay migraciones pendientes. Aplica las migraciones durante el despliegue antes de iniciar la API. No borres ni recrees la base.");
+        await InventarioSchemaUpgrade.VerificarAsync(db);
+        await OperacionSchemaUpgrade.VerificarAsync(db);
+    }
 
     if (!db.UsuariosTienda.Any(u => u.Rol == RolUsuario.SuperAdmin))
     {
-        var superAdminTienda = new QueVendecion.Domain.Entities.Tienda
+        var seedEmail = builder.Configuration["SeedSuperAdmin:Email"];
+        var seedPassword = builder.Configuration["SeedSuperAdmin:Password"];
+        if (string.IsNullOrWhiteSpace(seedEmail) && string.IsNullOrWhiteSpace(seedPassword))
         {
-            Nombre = "SuperAdmin",
-            Slug = "superadmin",
-            Direccion = "",
-            Telefono = ""
-        };
-        db.Tiendas.Add(superAdminTienda);
-        db.SaveChanges();
-
-        db.UsuariosTienda.Add(new QueVendecion.Domain.Entities.UsuarioTienda
+            app.Logger.LogWarning("No existe SuperAdmin y no se configuró SeedSuperAdmin. Configura credenciales privadas antes de crear la cuenta inicial.");
+        }
+        else
         {
-            TiendaId = superAdminTienda.Id,
-            Nombre = "Super Admin",
-            Email = "marco.cisneros@gmail.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("C@r0l1na10"),
-            Rol = RolUsuario.SuperAdmin
-        });
-        db.SaveChanges();
+            if (string.IsNullOrWhiteSpace(seedEmail) || string.IsNullOrWhiteSpace(seedPassword) || seedPassword.Length < 12)
+                throw new InvalidOperationException("SeedSuperAdmin requiere email y contraseña privada de al menos 12 caracteres.");
+            using var seedTransaction = db.Database.BeginTransaction();
+            var superAdminTienda = new QueVendecion.Domain.Entities.Tienda
+            {
+                Nombre = "SuperAdmin", Slug = "superadmin", Direccion = "", Telefono = ""
+            };
+            db.Tiendas.Add(superAdminTienda);
+            db.SaveChanges();
+            db.UsuariosTienda.Add(new QueVendecion.Domain.Entities.UsuarioTienda
+            {
+                TiendaId = superAdminTienda.Id,
+                Nombre = "Super Admin",
+                Email = seedEmail.Trim(),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedPassword),
+                Rol = RolUsuario.SuperAdmin
+            });
+            db.SaveChanges();
+            seedTransaction.Commit();
+        }
     }
 }
 
@@ -108,6 +145,21 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.Use(async (context, next) =>
+{
+    try { await next(context); }
+    catch (QueVendecion.Application.Exceptions.ReglaNegocioException ex)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsJsonAsync(new { code = ex.Codigo, message = ex.Message });
+    }
+    catch (Exception ex) when (EsConflictoInventario(ex))
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new { code = "inventario_concurrente", message = "El inventario cambió durante la operación. Actualiza e intenta de nuevo." });
+    }
+});
+
 app.UseCors("AllowFrontend");
 app.UseHttpsRedirection();
 app.UseAuthentication();
@@ -115,3 +167,10 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static bool EsConflictoInventario(Exception ex) => ex switch
+{
+    Npgsql.PostgresException pg => pg.SqlState is "40001" or "40P01",
+    Microsoft.Data.Sqlite.SqliteException sqlite => sqlite.SqliteErrorCode is 5 or 6,
+    _ => ex.InnerException != null && EsConflictoInventario(ex.InnerException)
+};

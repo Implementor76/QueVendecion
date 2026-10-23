@@ -23,4 +23,6 @@ Thumbs.db
 ## App
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 appsettings.Development.json

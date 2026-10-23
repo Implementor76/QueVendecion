@@ -15,6 +15,13 @@ public class PedidoDto
     public string? Observaciones { get; set; }
     public DateTime CreadoEn { get; set; }
     public DateTime? ActualizadoEn { get; set; }
+    public ModalidadPedido? Modalidad { get; set; }
+    public FormaEntrega? Entrega { get; set; }
+    public string? DireccionEntrega { get; set; }
+    public DateOnly? FechaServicio { get; set; }
+    public string? VentanaSolicitada { get; set; }
+    public string? HorarioConfirmado { get; set; }
+    public List<CambioEstadoPedidoDto> HistorialEstados { get; set; } = new();
     public List<ItemPedidoDto> Items { get; set; } = new();
 }
 
@@ -26,6 +33,11 @@ public class CrearPedidoDto
     public string? TelefonoCliente { get; set; }
     public FormaPago FormaPago { get; set; }
     public string? Observaciones { get; set; }
+    public ModalidadPedido Modalidad { get; set; } = ModalidadPedido.AlMomento;
+    public FormaEntrega Entrega { get; set; } = FormaEntrega.Recoleccion;
+    public string? DireccionEntrega { get; set; }
+    public DateOnly? FechaServicio { get; set; }
+    public string? VentanaSolicitada { get; set; }
     public List<CrearItemPedidoDto> Items { get; set; } = new();
 }
 
@@ -53,4 +65,17 @@ public class ActualizarEstadoPedidoDto
 public class ActualizarEstadoPagoDto
 {
     public EstadoPago EstadoPago { get; set; }
+}
+
+public class ConfirmarHorarioPedidoDto
+{
+    public string? HorarioConfirmado { get; set; }
+}
+
+public class CambioEstadoPedidoDto
+{
+    public EstadoPedido? Anterior { get; set; }
+    public EstadoPedido Nuevo { get; set; }
+    public DateTime FechaUtc { get; set; }
+    public int? UsuarioId { get; set; }
 }

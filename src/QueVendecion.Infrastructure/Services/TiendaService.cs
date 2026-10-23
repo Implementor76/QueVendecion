@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using QueVendecion.Application.DTOs;
 using QueVendecion.Application.Interfaces;
 using QueVendecion.Domain.Entities;
@@ -74,6 +75,16 @@ public class TiendaService : ITiendaService
         return true;
     }
 
+    public async Task<TiendaDto?> ActualizarOperacionAsync(int id, OperacionTiendaDto dto)
+    {
+        OperacionReglas.ValidarConfiguracion(dto);
+        var tienda = await _context.Tiendas.FindAsync(id);
+        if (tienda == null) return null;
+        tienda.OperacionJson = JsonSerializer.Serialize(dto);
+        await _context.SaveChangesAsync();
+        return MapToDto(tienda);
+    }
+
     private static TiendaDto MapToDto(Tienda t) => new()
     {
         Id = t.Id,
@@ -82,5 +93,6 @@ public class TiendaService : ITiendaService
         Direccion = t.Direccion,
         Telefono = t.Telefono,
         CreadaEn = t.CreadaEn
+        ,Operacion = OperacionReglas.Leer(t)
     };
 }

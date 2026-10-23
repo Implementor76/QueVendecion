@@ -1,5 +1,8 @@
 import { api } from '../utils/api.js';
 import { getClient, setClient, removeClient } from '../utils/clientAuth.js';
+import { fechaHoraEnTienda } from '../utils/fechaTienda.js';
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function renderTiendaCliente(container, params) {
   const slug = params?.slug;
@@ -37,14 +40,15 @@ export function renderTiendaCliente(container, params) {
 async function loadTiendaCliente(container, slug) {
   try {
     const tienda = await api.public.getTienda(slug);
+    const opciones = await api.public.getOpciones(slug);
     const cliente = getClient(slug);
 
     if (!cliente) {
-      renderLogin(container, slug, tienda);
+      renderLogin(container, slug, tienda, opciones);
       return;
     }
 
-    renderApp(container, slug, tienda, cliente);
+    renderApp(container, slug, tienda, cliente, opciones);
   } catch (error) {
     container.innerHTML = `
       <div class="min-h-screen flex items-center justify-center p-8">
@@ -59,7 +63,7 @@ async function loadTiendaCliente(container, slug) {
   }
 }
 
-function renderLogin(container, slug, tienda) {
+function renderLogin(container, slug, tienda, opciones) {
   container.innerHTML = `
     <div class="min-h-screen bg-surface flex flex-col items-center justify-center p-8">
       <div class="w-full max-w-sm animate-fade-in">
@@ -99,14 +103,13 @@ function renderLogin(container, slug, tienda) {
     try {
       const cliente = await api.public.registrarCliente(slug, { nombre, telefono });
       setClient(slug, { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono });
-      renderApp(container, slug, tienda, cliente);
+      renderApp(container, slug, tienda, cliente, opciones);
     } catch (error) {
       alert('Error al registrar. Intenta de nuevo.');
     }
   });
 }
-
-function renderApp(container, slug, tienda, cliente) {
+function renderApp(container, slug, tienda, cliente, opciones) {
   container.innerHTML = `
     <div class="min-h-screen bg-surface" style="padding-bottom:5.5rem">
       <div class="header-primary flex justify-between items-center">
@@ -142,6 +145,8 @@ function renderApp(container, slug, tienda, cliente) {
 
   let currentTab = 'menu';
   let carrito = {};
+  const seleccion = { modalidad: opciones.recepcionDisponible ? (opciones.alMomentoDisponible ? 'AlMomento' : (tienda.operacion.pedidosProgramados ? 'Programado' : null)) : null,
+    entrega: tienda.operacion.recoleccion && tienda.operacion.domicilio ? '' : tienda.operacion.recoleccion ? 'Recoleccion' : 'Domicilio', fecha: '', ventana: '' };
 
   function switchTab(tab) {
     currentTab = tab;
@@ -154,8 +159,8 @@ function renderApp(container, slug, tienda, cliente) {
     });
 
     const content = container.querySelector('#client-content');
-    if (tab === 'menu') renderMenuTab(content, slug, cliente, carrito, (c) => { carrito = c; });
-    else if (tab === 'pedidos') renderPedidosTab(content, slug, cliente);
+    if (tab === 'menu') renderMenuTab(content, slug, cliente, carrito, (c) => { carrito = c; }, tienda, opciones, seleccion);
+    else if (tab === 'pedidos') renderPedidosTab(content, slug, cliente, tienda.operacion.zonaHoraria);
     else if (tab === 'cuenta') renderCuentaTab(container, slug, tienda, cliente);
   }
 
@@ -166,7 +171,11 @@ function renderApp(container, slug, tienda, cliente) {
   switchTab('menu');
 }
 
-function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
+async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion) {
+  if (!seleccion.modalidad) {
+    content.innerHTML = `<div class="page-padding"><div class="card-elevated"><h2 class="font-bold text-primary">Pedidos cerrados por ahora</h2><p>${escapeHtml(tienda.operacion.mensajePublico || 'Consulta el horario de atención de la tienda.')}</p></div></div>`;
+    return;
+  }
   content.innerHTML = `
     <div class="page-padding">
       <div class="space-y-3">
@@ -176,21 +185,41 @@ function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
     </div>
   `;
 
-  api.public.getMenu(slug).then(productos => {
+  const todos = await api.public.getMenu(slug);
+  const necesitaFecha = todos.some(p => p.fechasServicio?.length);
+  const fechaMenu = seleccion.modalidad === 'Programado' ? seleccion.fecha : opciones.hoy;
+  const productos = necesitaFecha && !fechaMenu || !seleccion.entrega ? [] : await api.public.getMenu(slug, fechaMenu, seleccion.modalidad, seleccion.entrega);
+  {
+    const selector = `
+      <div class="card-elevated mb-4 space-y-3">
+        ${tienda.operacion.mensajePublico ? `<p class="text-primary font-medium">${escapeHtml(tienda.operacion.mensajePublico)}</p>` : '<p class="text-primary font-medium">Consulta las condiciones y el horario de entrega antes de pedir.</p>'}
+        <p class="text-sm text-text-secondary">Elige cuándo deseas recibir tu pedido. Espera la confirmación de la tienda antes de recogerlo.</p>
+        <label class="block text-sm">Forma de entrega<select id="entrega-catalogo" class="input-field"><option value="">Selecciona entrega</option>
+          ${tienda.operacion.recoleccion ? '<option value="Recoleccion">Recoger</option>' : ''}
+          ${tienda.operacion.domicilio ? '<option value="Domicilio">Domicilio</option>' : ''}
+        </select></label>
+        <label class="block text-sm">Tipo de pedido<select id="modalidad-pedido" class="input-field">
+          ${opciones.alMomentoDisponible ? '<option value="AlMomento">Al momento</option>' : ''}
+          ${tienda.operacion.pedidosProgramados ? '<option value="Programado">Programado</option>' : ''}
+        </select></label>
+        ${!opciones.alMomentoDisponible && tienda.operacion.pedidosAlMomento ? '<p class="text-sm text-text-secondary">Fuera del horario para pedidos al momento.</p>' : ''}
+        ${seleccion.modalidad === 'Programado' ? `<label class="block text-sm">Fecha de servicio<select id="fecha-servicio" class="input-field"><option value="">Selecciona fecha</option>
+          ${opciones.fechas.map(o => `<option value="${o.fecha}">${o.fecha}</option>`).join('')}
+        </select></label>
+        <label class="block text-sm">Ventana solicitada<select id="ventana-servicio" class="input-field"><option value="">Selecciona ventana</option>
+          ${(opciones.fechas.find(o => o.fecha === seleccion.fecha)?.ventanas || []).map(v => `<option value="${v}">${v}</option>`).join('')}
+        </select></label>` : ''}
+        <p class="text-sm text-text-secondary">${!seleccion.entrega ? 'Selecciona recoger o domicilio para ver los precios y productos correspondientes.' : necesitaFecha && !fechaMenu ? 'Selecciona una fecha para ver los productos disponibles.' : `Productos para ${fechaMenu}.`}</p>
+      </div>`;
     if (productos.length === 0) {
-      content.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon"><i data-lucide="utensils-crossed"></i></div>
-          <h3>Sin productos</h3>
-          <p>Esta tienda aún no tiene productos en su menú</p>
-        </div>
-      `;
-      if (window.lucide) lucide.createIcons();
+      content.innerHTML = `<div class="page-padding">${selector}<div class="empty-state"><h3>${!seleccion.entrega ? 'Selecciona la forma de entrega' : necesitaFecha && !fechaMenu ? 'Selecciona una fecha' : 'Sin productos para esta fecha'}</h3><p>${!seleccion.entrega ? 'Así verás los productos y precios correctos.' : necesitaFecha && !fechaMenu ? 'Elige una fecha de servicio para ver el catálogo.' : 'Elige otra fecha de servicio.'}</p></div></div>`;
+      bindSeleccion();
       return;
     }
 
     content.innerHTML = `
       <div class="page-padding page-padding-bottom" style="padding-bottom:8rem">
+        ${selector}
         <div class="space-y-3">
           ${productos.map((p, i) => {
             const agotado = p.tieneInventario && (p.stock ?? 0) <= 0;
@@ -250,6 +279,10 @@ function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
             </button>
           </div>
           <div id="resumen-pedido" class="space-y-2 mb-5"></div>
+          <p class="text-sm mb-4">${seleccion.entrega === 'Domicilio' ? 'Entrega a domicilio' : 'Recoger en tienda'}</p>
+          <label id="direccion-entrega-wrap" class="block text-sm mb-4 hidden">Dirección para entrega a domicilio
+            <textarea id="direccion-entrega" class="input-field" rows="2" maxlength="300" placeholder="Calle, número y referencias"></textarea>
+          </label>
           <div class="mb-4">
             <label class="block text-sm font-medium text-primary mb-2">Forma de pago</label>
             <div class="flex gap-2">
@@ -265,7 +298,7 @@ function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
             </div>
           </div>
           <div class="mb-5">
-            <textarea id="observaciones" placeholder="Alguna nota? Ej: Sin cebolla..." class="input-field" rows="2" style="resize:none"></textarea>
+            <textarea id="observaciones" placeholder="Instrucciones para tu pedido (opcional)" class="input-field" rows="2" style="resize:none"></textarea>
           </div>
           <button id="btn-confirmar" class="btn-primary w-full">
             <i data-lucide="check" class="w-5 h-5"></i> Confirmar Pedido
@@ -275,11 +308,40 @@ function renderMenuTab(content, slug, cliente, carrito, updateCarrito) {
     `;
 
     if (window.lucide) lucide.createIcons();
-    setupCarrito(content, slug, cliente, carrito, updateCarrito);
-  });
+    bindSeleccion();
+    setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones);
+    function bindSeleccion() {
+      const entrega = content.querySelector('#entrega-catalogo');
+      entrega.value = seleccion.entrega;
+      entrega.addEventListener('change', () => {
+        seleccion.entrega = entrega.value;
+        Object.keys(carrito).forEach(k => delete carrito[k]);
+        renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion);
+      });
+      const modalidad = content.querySelector('#modalidad-pedido');
+      modalidad.value = seleccion.modalidad;
+      modalidad.addEventListener('change', () => {
+        seleccion.modalidad = modalidad.value;
+        seleccion.fecha = ''; seleccion.ventana = '';
+        Object.keys(carrito).forEach(k => delete carrito[k]);
+        renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion);
+      });
+      const fecha = content.querySelector('#fecha-servicio');
+      if (fecha) {
+        fecha.value = seleccion.fecha;
+        fecha.addEventListener('change', () => {
+          seleccion.fecha = fecha.value; seleccion.ventana = '';
+          Object.keys(carrito).forEach(k => delete carrito[k]);
+          renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion);
+        });
+      }
+      const ventana = content.querySelector('#ventana-servicio');
+      if (ventana) { ventana.value = seleccion.ventana; ventana.addEventListener('change', () => { seleccion.ventana = ventana.value; }); }
+    }
+  }
 }
 
-function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
+function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones) {
   content.querySelectorAll('.qty-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const card = btn.closest('[data-product-id]');
@@ -312,9 +374,19 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
   const modal = content.querySelector('#modal-pedido');
   const btnCancelar = content.querySelector('#btn-cancelar');
   const btnConfirmar = content.querySelector('#btn-confirmar');
+  const syncDireccion = () => {
+    const domicilio = seleccion.entrega === 'Domicilio';
+    content.querySelector('#direccion-entrega-wrap').classList.toggle('hidden', !domicilio);
+    content.querySelector('#direccion-entrega').required = domicilio;
+  };
+  syncDireccion();
 
   btnHacerPedido?.addEventListener('click', () => {
+    if (seleccion.modalidad === 'Programado' && (!seleccion.fecha || !seleccion.ventana)) {
+      alert('Selecciona fecha y ventana de servicio.'); return;
+    }
     mostrarResumen(content, carrito);
+    content.querySelector('#resumen-pedido').insertAdjacentHTML('beforeend', `<p class="text-sm text-primary">${seleccion.modalidad === 'Programado' ? `Horario solicitado: ${seleccion.fecha} ${seleccion.ventana}` : `Al momento: ${opciones.hoy}. La tienda confirmará el horario estimado.`}</p><p class="text-sm text-text-secondary">${seleccion.entrega === 'Domicilio' ? 'Entrega a domicilio' : 'Recolección en tienda'} · pendiente de confirmación.</p>`);
     modal.classList.remove('hidden');
   });
 
@@ -340,12 +412,20 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
     const activePay = content.querySelector('.pay-option.active');
     const formaPago = activePay ? activePay.dataset.value : 'Efectivo';
     const observaciones = content.querySelector('#observaciones').value;
+    const entrega = seleccion.entrega;
+    const direccionEntrega = content.querySelector('#direccion-entrega').value.trim();
+    if (entrega === 'Domicilio' && !direccionEntrega) { alert('Captura la dirección de entrega.'); return; }
 
     try {
       await api.public.crearPedido(slug, {
         telefonoCliente: cliente.telefono,
         formaPago,
         observaciones: observaciones || null,
+        modalidad: seleccion.modalidad,
+        entrega,
+        direccionEntrega: entrega === 'Domicilio' ? direccionEntrega : null,
+        fechaServicio: seleccion.modalidad === 'Programado' ? seleccion.fecha : opciones.hoy,
+        ventanaSolicitada: seleccion.modalidad === 'Programado' ? seleccion.ventana : null,
         items
       });
 
@@ -373,7 +453,7 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito) {
         else window.location.reload();
       });
     } catch (error) {
-      alert('Error al enviar el pedido. Intenta de nuevo.');
+      alert(error.message || 'Error al enviar el pedido. Intenta de nuevo.');
     }
   });
 
@@ -416,7 +496,7 @@ function mostrarResumen(content, carrito) {
   `;
 }
 
-function renderPedidosTab(content, slug, cliente) {
+function renderPedidosTab(content, slug, cliente, zonaHoraria) {
   content.innerHTML = `
     <div class="page-padding">
       <div class="space-y-3">
@@ -463,6 +543,12 @@ function renderPedidosTab(content, slug, cliente) {
           <span class="badge ${estadoBadge(p.estado)}">${p.estado}</span>
         </div>
         <div class="space-y-1.5 mb-3">
+          ${p.fechaServicio ? `<p class="text-sm text-primary">${p.modalidad === 'Programado' ? 'Programado' : 'Al momento'} · ${p.fechaServicio} · ${p.entrega === 'Domicilio' ? 'Domicilio' : 'Recoger'}</p>` : '<p class="text-sm text-text-secondary">Pedido anterior sin fecha de servicio registrada</p>'}
+          ${p.ventanaSolicitada ? `<p class="text-sm text-text-secondary">Horario solicitado: ${p.ventanaSolicitada}</p>` : ''}
+          ${p.direccionEntrega ? `<p class="text-sm text-text-secondary">Dirección de entrega: ${escapeHtml(p.direccionEntrega)}</p>` : ''}
+          ${p.horarioConfirmado ? `<p class="text-sm text-primary">Horario confirmado o estimado: ${escapeHtml(p.horarioConfirmado)}</p>` : ''}
+          ${p.estado === 'Recibido' ? '<p class="text-sm text-text-secondary">Pendiente de confirmación de la tienda</p>' : ''}
+          ${p.estado === 'Listo' ? '<p class="text-sm text-success">Pedido listo para recoger o entregar</p>' : ''}
           ${p.items.map(i => `
             <div class="flex justify-between text-sm">
               <span class="text-primary">${i.productoNombre} <span class="text-text-secondary">×${i.cantidad}</span></span>
@@ -473,7 +559,7 @@ function renderPedidosTab(content, slug, cliente) {
         <div class="flex justify-between items-center pt-3" style="border-top:1px solid #eeece8">
           <span class="text-text-secondary text-[0.8125rem] flex items-center gap-1">
             <i data-lucide="clock" class="w-3.5 h-3.5"></i>
-            ${formatDate(p.creadoEn)}
+            ${fechaHoraEnTienda(p.creadoEn, zonaHoraria)}
           </span>
           <span class="font-bold text-accent">$${p.total.toFixed(2)}</span>
         </div>
@@ -542,13 +628,4 @@ function renderCuentaTab(container, slug, tienda, cliente) {
     removeClient(slug);
     window.location.reload();
   });
-}
-
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getDate().toString().padStart(2, '0');
-  const month = (d.getMonth() + 1).toString().padStart(2, '0');
-  const hours = d.getHours().toString().padStart(2, '0');
-  const mins = d.getMinutes().toString().padStart(2, '0');
-  return `${day}/${month} ${hours}:${mins}`;
 }

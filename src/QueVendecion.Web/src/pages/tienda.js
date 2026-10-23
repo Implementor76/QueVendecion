@@ -2,6 +2,18 @@ import { api } from '../utils/api.js';
 import { getAuth, clearAuth } from '../utils/auth.js';
 import { navigate } from '../utils/router.js';
 
+const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const diasApi = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const textoVentanas = (ventanas = []) => ventanas.map(v => `${dias[typeof v.dia === 'number' ? v.dia : diasApi.indexOf(v.dia)]} ${v.inicio}-${v.fin}`).join('\n');
+function leerVentanas(texto) {
+  return texto.split('\n').map(linea => linea.trim()).filter(Boolean).map(linea => {
+    const match = linea.match(/^(.+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    const dia = match && dias.findIndex(d => d.toLowerCase() === match[1].toLowerCase());
+    if (!match || dia < 0) throw new Error('Usa una línea por ventana: Lunes 09:00-17:00');
+    return { dia, inicio: match[2], fin: match[3] };
+  });
+}
+
 function renderAdminNav(active) {
   const items = [
     { href: '/pedidos', icon: 'clipboard-list', label: 'Pedidos', id: 'pedidos' },
@@ -122,6 +134,27 @@ async function loadTienda(container) {
           </a>
         </div>
 
+        <div class="card-elevated">
+          <h3 class="font-semibold text-primary mb-3">Cómo recibe y entrega pedidos</h3>
+          <form id="form-operacion" class="space-y-3 text-sm">
+            <label class="block"><input type="checkbox" id="op-momento" ${tienda.operacion.pedidosAlMomento ? 'checked' : ''}> Pedidos al momento</label>
+            <label class="block"><input type="checkbox" id="op-programados" ${tienda.operacion.pedidosProgramados ? 'checked' : ''}> Pedidos programados</label>
+            <label class="block"><input type="checkbox" id="op-recoger" ${tienda.operacion.recoleccion ? 'checked' : ''}> Recolección</label>
+            <label class="block"><input type="checkbox" id="op-domicilio" ${tienda.operacion.domicilio ? 'checked' : ''}> Entrega a domicilio</label>
+            <label class="block">Zona horaria<input id="op-zona" class="input-field" value="${tienda.operacion.zonaHoraria}" required></label>
+            <label class="block">Aviso público<textarea id="op-mensaje" class="input-field" rows="2" placeholder="Condiciones de entrega">${tienda.operacion.mensajePublico || ''}</textarea></label>
+            <label class="block">Días y horarios para recibir pedidos<textarea id="op-atencion" class="input-field" rows="3" placeholder="Lunes 09:00-17:00">${textoVentanas(tienda.operacion.horariosAtencion)}</textarea></label>
+            <label class="block">Ventanas de recolección o entrega<textarea id="op-servicio" class="input-field" rows="3" placeholder="Lunes 20:00-22:00">${textoVentanas(tienda.operacion.ventanasServicio)}</textarea></label>
+            <p class="text-text-secondary">Una ventana por línea. Usa el nombre del día y HH:mm-HH:mm. Recepción vacía = abierta todo el tiempo. La entrega se configura por separado.</p>
+            <label class="block">Anticipación mínima (minutos)<input id="op-min" type="number" min="0" class="input-field" value="${tienda.operacion.anticipacionMinimaMinutos}"></label>
+            <label class="block">Anticipación máxima (días)<input id="op-max" type="number" min="1" max="365" class="input-field" value="${tienda.operacion.anticipacionMaximaDias}"></label>
+            <label class="block">Días antes de la fecha de entrega para cerrar pedidos (0 = sin corte)<input id="op-corte-dias" type="number" min="0" class="input-field" value="${tienda.operacion.diasPreviosCorte}"></label>
+            <label class="block">Hora límite local<input id="op-corte-hora" type="time" class="input-field" value="${tienda.operacion.horaCorte || ''}"></label>
+            <p id="op-error" class="text-error"></p>
+            <button type="submit" class="btn-accent w-full">Guardar operación</button>
+          </form>
+        </div>
+
         <button id="btn-cambiar-pass" class="btn-ghost w-full justify-center text-text-secondary text-sm">
           <i data-lucide="key-round" class="w-4 h-4"></i>
           Cambiar contraseña
@@ -171,6 +204,26 @@ async function loadTienda(container) {
 
     container.querySelector('#btn-editar').addEventListener('click', () => {
       container.querySelector('#editar-tienda').classList.toggle('hidden');
+    });
+    container.querySelector('#form-operacion').addEventListener('submit', async e => {
+      e.preventDefault();
+      try {
+        await api.tiendas.updateOperacion({
+          pedidosAlMomento: container.querySelector('#op-momento').checked,
+          pedidosProgramados: container.querySelector('#op-programados').checked,
+          recoleccion: container.querySelector('#op-recoger').checked,
+          domicilio: container.querySelector('#op-domicilio').checked,
+          zonaHoraria: container.querySelector('#op-zona').value.trim(),
+          mensajePublico: container.querySelector('#op-mensaje').value.trim() || null,
+          horariosAtencion: leerVentanas(container.querySelector('#op-atencion').value),
+          ventanasServicio: leerVentanas(container.querySelector('#op-servicio').value),
+          anticipacionMinimaMinutos: Number(container.querySelector('#op-min').value),
+          anticipacionMaximaDias: Number(container.querySelector('#op-max').value),
+          diasPreviosCorte: Number(container.querySelector('#op-corte-dias').value),
+          horaCorte: container.querySelector('#op-corte-hora').value || null
+        });
+        loadTienda(container);
+      } catch (err) { container.querySelector('#op-error').textContent = err.message; }
     });
     container.querySelector('#btn-cancelar-edit').addEventListener('click', () => {
       container.querySelector('#editar-tienda').classList.add('hidden');

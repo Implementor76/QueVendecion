@@ -22,10 +22,10 @@ public class PedidosController : ControllerBase
     private int GetTiendaId() => int.Parse(User.FindFirst("TiendaId")?.Value ?? "0");
 
     [HttpGet("mi-tienda")]
-    public async Task<ActionResult<List<PedidoDto>>> ObtenerMisPedidos([FromQuery] EstadoPedido? estado)
+    public async Task<ActionResult<List<PedidoDto>>> ObtenerMisPedidos([FromQuery] EstadoPedido? estado, [FromQuery] DateOnly? fechaServicio)
     {
         var tiendaId = GetTiendaId();
-        return await _pedidoService.ObtenerPorTiendaAsync(tiendaId, estado);
+        return await _pedidoService.ObtenerPorTiendaAsync(tiendaId, estado, fechaServicio);
     }
 
     [HttpGet("{id}")]
@@ -44,7 +44,8 @@ public class PedidosController : ControllerBase
         if (pedido == null) return NotFound();
         if (pedido.TiendaId != GetTiendaId()) return Forbid();
 
-        var actualizado = await _pedidoService.ActualizarEstadoAsync(id, dto.Estado);
+        var usuarioId = int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var parsed) ? parsed : (int?)null;
+        var actualizado = await _pedidoService.ActualizarEstadoAsync(id, dto.Estado, usuarioId);
         if (actualizado == null) return NotFound();
         return actualizado;
     }
@@ -59,5 +60,15 @@ public class PedidosController : ControllerBase
         var actualizado = await _pedidoService.ActualizarEstadoPagoAsync(id, dto.EstadoPago);
         if (actualizado == null) return NotFound();
         return actualizado;
+    }
+
+    [HttpPatch("{id}/horario")]
+    public async Task<ActionResult<PedidoDto>> ConfirmarHorario(int id, [FromBody] ConfirmarHorarioPedidoDto dto)
+    {
+        var pedido = await _pedidoService.ObtenerPorIdAsync(id);
+        if (pedido == null) return NotFound();
+        if (pedido.TiendaId != GetTiendaId()) return Forbid();
+        var actualizado = await _pedidoService.ConfirmarHorarioAsync(id, dto.HorarioConfirmado);
+        return actualizado == null ? NotFound() : actualizado;
     }
 }

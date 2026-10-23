@@ -8,6 +8,7 @@ public class Tienda
     public string? Direccion { get; set; }
     public string? Telefono { get; set; }
     public DateTime CreadaEn { get; set; } = DateTime.UtcNow;
+    public string? OperacionJson { get; set; }
 
     public ICollection<UsuarioTienda> Usuarios { get; set; } = new List<UsuarioTienda>();
     public ICollection<Producto> Productos { get; set; } = new List<Producto>();

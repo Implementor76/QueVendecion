@@ -10,6 +10,7 @@ public class TiendaDto
     public string? Direccion { get; set; }
     public string? Telefono { get; set; }
     public DateTime CreadaEn { get; set; }
+    public OperacionTiendaDto Operacion { get; set; } = new();
 }
 
 public class CrearTiendaDto

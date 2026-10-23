@@ -13,6 +13,8 @@ public class ProductoDto
     public string? ImagenUrl { get; set; }
     public bool TieneInventario { get; set; }
     public int? Stock { get; set; }
+    public List<DateOnly> FechasServicio { get; set; } = new();
+    public EntregaProducto? EntregaPermitida { get; set; }
 }
 
 public class CrearProductoDto
@@ -24,4 +26,6 @@ public class CrearProductoDto
     public string? ImagenUrl { get; set; }
     public bool TieneInventario { get; set; }
     public int? Stock { get; set; }
+    public List<DateOnly> FechasServicio { get; set; } = new();
+    public EntregaProducto? EntregaPermitida { get; set; } = EntregaProducto.Ambas;
 }

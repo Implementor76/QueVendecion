@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using QueVendecion.Application.DTOs;
 using QueVendecion.Application.Interfaces;
 using QueVendecion.Domain.Enums;
+using QueVendecion.Infrastructure.Services;
 
 namespace QueVendecion.Api.Controllers;
 
@@ -35,13 +36,33 @@ public class PublicController : ControllerBase
     }
 
     [HttpGet("tienda/{slug}/menu")]
-    public async Task<ActionResult<List<ProductoDto>>> ObtenerMenu(string slug)
+    public async Task<ActionResult<List<ProductoDto>>> ObtenerMenu(string slug, [FromQuery] DateOnly? fechaServicio, [FromQuery] ModalidadPedido? modalidad, [FromQuery] FormaEntrega? entrega)
     {
         var tienda = await _tiendaService.ObtenerPorSlugAsync(slug);
         if (tienda == null) return NotFound();
 
         var productos = await _productoService.ObtenerPorTiendaAsync(tienda.Id);
-        return productos.Where(p => p.Disponible).ToList();
+        return productos.Where(p => p.Disponible && (modalidad != ModalidadPedido.AlMomento || p.FechasServicio.Count == 0)
+            && (entrega == null || p.EntregaPermitida == (entrega == FormaEntrega.Recoleccion ? EntregaProducto.Recoleccion : EntregaProducto.Domicilio) || p.EntregaPermitida == EntregaProducto.Ambas)
+            && (fechaServicio == null || p.FechasServicio.Count == 0 || p.FechasServicio.Contains(fechaServicio.Value))).ToList();
+    }
+
+    [HttpGet("tienda/{slug}/opciones")]
+    public async Task<IActionResult> ObtenerOpciones(string slug)
+    {
+        var tienda = await _tiendaService.ObtenerPorSlugAsync(slug);
+        if (tienda == null) return NotFound();
+        var config = tienda.Operacion;
+        var hoy = DateOnly.FromDateTime(OperacionReglas.AhoraLocal(config, DateTime.UtcNow));
+        var fechas = config.PedidosProgramados
+            ? Enumerable.Range(0, config.AnticipacionMaximaDias + 1)
+                .Select(i => hoy.AddDays(i))
+                .Select(fecha => new { fecha, ventanas = OperacionReglas.VentanasPara(config, fecha)
+                    .Where(v => OperacionReglas.PuedeProgramarse(config, fecha, v, DateTime.UtcNow)).ToList() })
+                .Where(o => o.ventanas.Count > 0).ToList()
+            : new();
+        return Ok(new { hoy, recepcionDisponible = OperacionReglas.PuedeRecibirAhora(config, DateTime.UtcNow),
+            alMomentoDisponible = OperacionReglas.PuedeAlMomento(config, DateTime.UtcNow), fechas });
     }
 
     [HttpPost("tienda/{slug}/cliente")]

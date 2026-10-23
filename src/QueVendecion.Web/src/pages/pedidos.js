@@ -1,6 +1,9 @@
 import { api } from '../utils/api.js';
 import { getAuth, clearAuth } from '../utils/auth.js';
 import { navigate } from '../utils/router.js';
+import { horaEnTienda, fechaHoraEnTienda } from '../utils/fechaTienda.js';
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const ESTADO_BADGE = {
   Recibido: 'badge-info',
@@ -68,6 +71,9 @@ export function renderPedidos(container, params) {
           <button class="chip" data-estado="Entregado">Entregados</button>
           <button class="chip" data-estado="Cancelado">Cancelados</button>
         </div>
+        <label class="block text-sm text-primary mb-4">Fecha de servicio (vacío = todas, incluidos pedidos anteriores)
+          <input id="filtro-fecha" type="date" class="input-field">
+        </label>
         <div id="pedidos-list" class="space-y-3">
           <div class="space-y-3">
             <div class="skeleton h-32 w-full"></div>
@@ -93,16 +99,21 @@ export function renderPedidos(container, params) {
       filterBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       filtroActual = btn.dataset.estado;
-      loadPedidos(container.querySelector('#pedidos-list'), filtroActual);
+      loadPedidos(container.querySelector('#pedidos-list'), filtroActual, container.querySelector('#filtro-fecha').value);
     });
   });
 
+  container.querySelector('#filtro-fecha').addEventListener('change', () => loadPedidos(container.querySelector('#pedidos-list'), filtroActual, container.querySelector('#filtro-fecha').value));
   loadPedidos(container.querySelector('#pedidos-list'), filtroActual);
 }
 
-async function loadPedidos(container, estado) {
+async function loadPedidos(container, estado, fechaServicio = '') {
   try {
-    const pedidos = await api.pedidos.getMisPedidos(estado || undefined);
+    const [pedidos, tienda] = await Promise.all([
+      api.pedidos.getMisPedidos(estado || undefined, fechaServicio || undefined),
+      api.tiendas.getMiTienda()
+    ]);
+    const zonaHoraria = tienda.operacion.zonaHoraria;
 
     if (pedidos.length === 0) {
       container.innerHTML = `
@@ -126,6 +137,10 @@ async function loadPedidos(container, estado) {
           <span class="badge ${ESTADO_BADGE[p.estado] || 'badge-info'}">${p.estado}</span>
         </div>
         <div class="flex flex-wrap gap-1.5 mb-3">
+          <p class="text-sm text-primary w-full">${p.fechaServicio ? `Servicio ${p.fechaServicio} · ${p.modalidad === 'Programado' ? 'Programado' : 'Al momento'} · ${p.entrega === 'Domicilio' ? 'Domicilio' : 'Recoger'}` : 'Pedido anterior sin fecha de servicio registrada'}</p>
+          ${p.ventanaSolicitada ? `<p class="text-sm text-text-secondary w-full">Solicitado: ${p.ventanaSolicitada}</p>` : ''}
+          ${p.direccionEntrega ? `<p class="text-sm text-text-secondary w-full">Dirección: ${escapeHtml(p.direccionEntrega)}</p>` : ''}
+          ${p.horarioConfirmado ? `<p class="text-sm text-primary w-full">Confirmado o estimado: ${escapeHtml(p.horarioConfirmado)}</p>` : ''}
           ${p.items.map(i => `
             <span class="chip text-[0.75rem] py-1 px-2.5" style="cursor:default">${i.productoNombre} ×${i.cantidad}</span>
           `).join('')}
@@ -134,14 +149,18 @@ async function loadPedidos(container, estado) {
           <span class="font-bold text-accent text-lg">$${p.total.toFixed(2)}</span>
           <span class="text-text-secondary text-[0.8125rem] flex items-center gap-1">
             <i data-lucide="clock" class="w-3.5 h-3.5"></i>
-            ${p.formaPago} · ${new Date(p.creadoEn).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+            ${p.formaPago} · ${horaEnTienda(p.creadoEn, zonaHoraria)}
           </span>
         </div>
-        <div class="flex gap-2">
+        ${p.estado !== 'Cancelado' && p.estado !== 'Entregado' ? `<div class="flex gap-2 mb-3"><input class="input-field min-w-0 flex-1 horario-confirmado" data-id="${p.id}" placeholder="Hora estimada o confirmada" value="${escapeHtml(p.horarioConfirmado || '')}"><button class="btn-ghost btn-horario shrink-0" data-id="${p.id}">Guardar</button></div>` : ''}
+        <div class="flex flex-wrap gap-2">
           ${ESTADO_SIGUIENTE[p.estado] ? `
             <button class="btn-accent flex-1 text-sm btn-avanzar" data-id="${p.id}" data-estado="${ESTADO_SIGUIENTE[p.estado]}">
               <i data-lucide="arrow-right" class="w-4 h-4"></i> ${ESTADO_SIGUIENTE[p.estado]}
             </button>
+          ` : ''}
+          ${p.estado === 'Confirmado' || p.estado === 'EnPreparacion' ? `
+            <button class="btn-success flex-1 text-sm btn-entregar" data-id="${p.id}">Entregar ahora</button>
           ` : ''}
           ${p.estado !== 'Cancelado' && p.estado !== 'Entregado' ? `
             <button class="btn-danger text-sm btn-cancelar-pedido" data-id="${p.id}">
@@ -156,6 +175,7 @@ async function loadPedidos(container, estado) {
             <span class="badge badge-success flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Pagado</span>
           `}
         </div>
+        ${p.historialEstados?.length ? `<details class="mt-3 text-xs text-text-secondary"><summary>Historial de estados</summary>${p.historialEstados.map(h => `<p>${h.anterior || 'Inicio'} → ${h.nuevo} · ${fechaHoraEnTienda(h.fechaUtc, zonaHoraria)}</p>`).join('')}</details>` : ''}
       </div>
     `).join('');
 
@@ -164,7 +184,7 @@ async function loadPedidos(container, estado) {
     container.querySelectorAll('.btn-avanzar').forEach(btn => {
       btn.addEventListener('click', async () => {
         await api.pedidos.updateEstado(btn.dataset.id, btn.dataset.estado);
-        loadPedidos(container, estado);
+        loadPedidos(container, estado, fechaServicio);
       });
     });
 
@@ -172,17 +192,29 @@ async function loadPedidos(container, estado) {
       btn.addEventListener('click', async () => {
         if (confirm('¿Cancelar este pedido?')) {
           await api.pedidos.updateEstado(btn.dataset.id, 'Cancelado');
-          loadPedidos(container, estado);
+          loadPedidos(container, estado, fechaServicio);
         }
       });
     });
+    container.querySelectorAll('.btn-entregar').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('¿Confirmas que el pedido ya fue entregado?')) return;
+      try { await api.pedidos.updateEstado(btn.dataset.id, 'Entregado'); loadPedidos(container, estado, fechaServicio); }
+      catch (err) { alert(err.message); }
+    }));
 
     container.querySelectorAll('.btn-pagar').forEach(btn => {
       btn.addEventListener('click', async () => {
         await api.pedidos.updatePago(btn.dataset.id, 'Pagado');
-        loadPedidos(container, estado);
+        loadPedidos(container, estado, fechaServicio);
       });
     });
+    container.querySelectorAll('.btn-horario').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        const valor = container.querySelector(`.horario-confirmado[data-id="${btn.dataset.id}"]`).value.trim();
+        await api.pedidos.confirmarHorario(btn.dataset.id, valor || null);
+        loadPedidos(container, estado, fechaServicio);
+      } catch (err) { alert(err.message); }
+    }));
   } catch (error) {
     container.innerHTML = `
       <div class="empty-state">

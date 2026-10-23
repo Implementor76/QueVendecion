@@ -21,7 +21,7 @@ public class ProductoServiceTests : IDisposable
 
     private async Task<Tienda> SeedTienda()
     {
-        var tienda = new Tienda { Nombre = "Test", Slug = "test" };
+        var tienda = new Tienda { Nombre = "Test", Slug = Guid.NewGuid().ToString() };
         _context.Tiendas.Add(tienda);
         await _context.SaveChangesAsync();
         return tienda;

@@ -1,3 +1,6 @@
+using System.Data;
+using System.Text.Json;
+using QueVendecion.Application.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using QueVendecion.Application.DTOs;
 using QueVendecion.Application.Interfaces;
@@ -16,7 +19,7 @@ public class PedidoService : IPedidoService
         _context = context;
     }
 
-    public async Task<List<PedidoDto>> ObtenerPorTiendaAsync(int tiendaId, EstadoPedido? estado = null)
+    public async Task<List<PedidoDto>> ObtenerPorTiendaAsync(int tiendaId, EstadoPedido? estado = null, DateOnly? fechaServicio = null)
     {
         var query = _context.Pedidos
             .Include(p => p.Items)
@@ -26,6 +29,8 @@ public class PedidoService : IPedidoService
 
         if (estado.HasValue)
             query = query.Where(p => p.Estado == estado.Value);
+        if (fechaServicio.HasValue)
+            query = query.Where(p => p.FechaServicio == fechaServicio.Value);
 
         var pedidos = await query
             .OrderByDescending(p => p.CreadoEn)
@@ -56,29 +61,50 @@ public class PedidoService : IPedidoService
         return pedido == null ? null : MapToDto(pedido);
     }
 
-    public async Task<PedidoDto> CrearAsync(CrearPedidoDto dto)
+    public Task<PedidoDto> CrearAsync(CrearPedidoDto dto) => EnTransaccionAsync(() => CrearInternoAsync(dto));
+
+    private async Task<PedidoDto> CrearInternoAsync(CrearPedidoDto dto)
     {
+        if (dto.Items == null || dto.Items.Count == 0 || dto.Items.Any(i => i.Cantidad <= 0))
+            throw new ReglaNegocioException("cantidad_invalida", "Agrega productos con cantidades mayores a cero.");
+        var tienda = await _context.Tiendas.FindAsync(dto.TiendaId)
+            ?? throw new ReglaNegocioException("tienda_no_disponible", "La tienda no está disponible.");
+        var operacion = OperacionReglas.Leer(tienda);
         var pedido = new Pedido
         {
             TiendaId = dto.TiendaId,
             ClienteId = dto.ClienteId,
             ClienteNombre = dto.ClienteNombre,
             FormaPago = dto.FormaPago,
-            Observaciones = dto.Observaciones
+            Observaciones = dto.Observaciones,
+            Modalidad = dto.Modalidad,
+            Entrega = dto.Entrega,
+            DireccionEntrega = dto.Entrega == FormaEntrega.Domicilio ? dto.DireccionEntrega?.Trim() : null,
+            VentanaSolicitada = dto.VentanaSolicitada
         };
+        pedido.HistorialEstadosJson = JsonSerializer.Serialize(new[] { new CambioEstadoPedidoDto
+            { Anterior = null, Nuevo = EstadoPedido.Recibido, FechaUtc = pedido.CreadoEn } });
 
         var requisiciones = new Dictionary<Producto, int>();
+        var productos = new List<Producto>();
 
-        foreach (var itemDto in dto.Items)
+        foreach (var itemDto in dto.Items.GroupBy(i => i.ProductoId)
+            .Select(g => new CrearItemPedidoDto { ProductoId = g.Key, Cantidad = g.Sum(i => i.Cantidad) })
+            .OrderBy(i => i.ProductoId))
         {
             var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
             if (producto == null)
                 throw new InvalidOperationException($"Producto {itemDto.ProductoId} no encontrado");
 
+            await _context.Entry(producto).ReloadAsync();
+            if (producto.TiendaId != dto.TiendaId || !producto.Disponible)
+                throw new ReglaNegocioException("producto_no_disponible", "Un producto ya no está disponible en esta tienda.");
+
             if (producto.TieneInventario && (producto.Stock ?? 0) < itemDto.Cantidad)
-                throw new InvalidOperationException($"Stock insuficiente para {producto.Nombre}");
+                throw new ReglaNegocioException("stock_insuficiente", $"Stock insuficiente para {producto.Nombre}. Reduce la cantidad e intenta de nuevo.");
 
             requisiciones[producto] = itemDto.Cantidad;
+            productos.Add(producto);
 
             var item = new ItemPedido
             {
@@ -89,6 +115,11 @@ public class PedidoService : IPedidoService
 
             pedido.Items.Add(item);
         }
+
+        OperacionReglas.ValidarPedido(operacion, dto, productos, DateTime.UtcNow);
+        pedido.FechaServicio = dto.Modalidad == ModalidadPedido.AlMomento
+            ? DateOnly.FromDateTime(OperacionReglas.AhoraLocal(operacion, DateTime.UtcNow))
+            : dto.FechaServicio;
 
         pedido.Total = pedido.Items.Sum(i => i.Subtotal);
 
@@ -119,7 +150,10 @@ public class PedidoService : IPedidoService
         return await ObtenerPorIdAsync(pedido.Id) ?? MapToDto(pedido);
     }
 
-    public async Task<PedidoDto?> ActualizarEstadoAsync(int id, EstadoPedido estado)
+    public Task<PedidoDto?> ActualizarEstadoAsync(int id, EstadoPedido estado, int? usuarioId = null) =>
+        EnTransaccionAsync(() => ActualizarEstadoInternoAsync(id, estado, usuarioId));
+
+    private async Task<PedidoDto?> ActualizarEstadoInternoAsync(int id, EstadoPedido estado, int? usuarioId)
     {
         var pedido = await _context.Pedidos
             .Include(p => p.Items)
@@ -127,19 +161,51 @@ public class PedidoService : IPedidoService
             .FirstOrDefaultAsync(p => p.Id == id);
         if (pedido == null) return null;
 
+        await _context.Entry(pedido).ReloadAsync();
+        if (pedido.Estado == EstadoPedido.Cancelado)
+        {
+            if (estado != EstadoPedido.Cancelado)
+                throw new ReglaNegocioException("pedido_cancelado", "Un pedido cancelado no puede reabrirse. Crea un nuevo pedido.");
+            return MapToDto(pedido);
+        }
+        if (estado == pedido.Estado) return MapToDto(pedido);
+        var permitida = estado == EstadoPedido.Cancelado && pedido.Estado != EstadoPedido.Entregado ||
+            pedido.Estado switch
+            {
+                EstadoPedido.Recibido => estado == EstadoPedido.Confirmado,
+                EstadoPedido.Confirmado => estado is EstadoPedido.EnPreparacion or EstadoPedido.Listo or EstadoPedido.Entregado,
+                EstadoPedido.EnPreparacion => estado is EstadoPedido.Listo or EstadoPedido.Entregado,
+                EstadoPedido.Listo => estado == EstadoPedido.Entregado,
+                _ => false
+            };
+        if (!Enum.IsDefined(estado) || !permitida)
+            throw new ReglaNegocioException("transicion_invalida", "Confirma el pedido primero; después prepara, marca listo o entrega según corresponda.");
         var estadoAnterior = pedido.Estado;
         pedido.Estado = estado;
         pedido.ActualizadoEn = DateTime.UtcNow;
+        var historial = string.IsNullOrWhiteSpace(pedido.HistorialEstadosJson)
+            ? new List<CambioEstadoPedidoDto>()
+            : JsonSerializer.Deserialize<List<CambioEstadoPedidoDto>>(pedido.HistorialEstadosJson) ?? new();
+        historial.Add(new CambioEstadoPedidoDto { Anterior = estadoAnterior, Nuevo = estado,
+            FechaUtc = pedido.ActualizadoEn.Value, UsuarioId = usuarioId });
+        pedido.HistorialEstadosJson = JsonSerializer.Serialize(historial);
 
         if (estado == EstadoPedido.Cancelado && estadoAnterior != EstadoPedido.Cancelado)
         {
-            foreach (var item in pedido.Items)
+            var salidas = await _context.MovimientosInventario
+                .Where(m => m.PedidoId == id && m.Tipo == TipoMovimiento.Salida)
+                .GroupBy(m => m.ProductoId)
+                .Select(g => new { ProductoId = g.Key, Cantidad = g.Sum(m => m.Cantidad) })
+                .OrderBy(m => m.ProductoId).ToListAsync();
+            foreach (var item in salidas)
             {
-                var producto = item.Producto;
-                if (producto == null || !producto.TieneInventario) continue;
+                var producto = await _context.Productos.FindAsync(item.ProductoId);
+                if (producto == null) continue;
+                await _context.Entry(producto).ReloadAsync();
+                if (!producto.TieneInventario) continue;
 
                 var stockAnterior = producto.Stock ?? 0;
-                producto.Stock = stockAnterior + item.Cantidad;
+                producto.Stock = checked(stockAnterior + item.Cantidad);
 
                 _context.MovimientosInventario.Add(new MovimientoInventario
                 {
@@ -171,6 +237,20 @@ public class PedidoService : IPedidoService
         return await ObtenerPorIdAsync(id);
     }
 
+    public async Task<PedidoDto?> ConfirmarHorarioAsync(int id, string? horarioConfirmado)
+    {
+        var pedido = await _context.Pedidos.FindAsync(id);
+        if (pedido == null) return null;
+        if (pedido.Estado is EstadoPedido.Cancelado or EstadoPedido.Entregado)
+            throw new ReglaNegocioException("transicion_invalida", "Este pedido ya está cerrado.");
+        if (horarioConfirmado?.Length > 100)
+            throw new ReglaNegocioException("horario_invalido", "El horario confirmado debe tener menos de 100 caracteres.");
+        pedido.HorarioConfirmado = string.IsNullOrWhiteSpace(horarioConfirmado) ? null : horarioConfirmado.Trim();
+        pedido.ActualizadoEn = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return await ObtenerPorIdAsync(id);
+    }
+
     public async Task<bool> EliminarAsync(int id)
     {
         var pedido = await _context.Pedidos.FindAsync(id);
@@ -179,6 +259,23 @@ public class PedidoService : IPedidoService
         _context.Pedidos.Remove(pedido);
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    private async Task<T> EnTransaccionAsync<T>(Func<Task<T>> action)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        try
+        {
+            var result = await action();
+            await transaction.CommitAsync();
+            return result;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            _context.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     private static PedidoDto MapToDto(Pedido p) => new()
@@ -192,8 +289,15 @@ public class PedidoService : IPedidoService
         EstadoPago = p.EstadoPago,
         Total = p.Total,
         Observaciones = p.Observaciones,
-        CreadoEn = p.CreadoEn,
-        ActualizadoEn = p.ActualizadoEn,
+        CreadoEn = ComoUtc(p.CreadoEn),
+        ActualizadoEn = p.ActualizadoEn.HasValue ? ComoUtc(p.ActualizadoEn.Value) : null,
+        Modalidad = p.Modalidad,
+        Entrega = p.Entrega,
+        DireccionEntrega = p.DireccionEntrega,
+        FechaServicio = p.FechaServicio,
+        VentanaSolicitada = p.VentanaSolicitada,
+        HorarioConfirmado = p.HorarioConfirmado,
+        HistorialEstados = LeerHistorial(p.HistorialEstadosJson),
         Items = p.Items.Select(i => new ItemPedidoDto
         {
             Id = i.Id,
@@ -204,4 +308,22 @@ public class PedidoService : IPedidoService
             Subtotal = i.Subtotal
         }).ToList()
     };
+
+    // SQLite conserva el valor del instante, pero EF lo lee con Kind=Unspecified.
+    // Estas columnas e historial se escriben con DateTime.UtcNow; no se altera la base.
+    private static DateTime ComoUtc(DateTime valor) => valor.Kind switch
+    {
+        DateTimeKind.Utc => valor,
+        DateTimeKind.Local => valor.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(valor, DateTimeKind.Utc)
+    };
+
+    private static List<CambioEstadoPedidoDto> LeerHistorial(string? json)
+    {
+        var cambios = string.IsNullOrWhiteSpace(json)
+            ? new List<CambioEstadoPedidoDto>()
+            : JsonSerializer.Deserialize<List<CambioEstadoPedidoDto>>(json) ?? new();
+        foreach (var cambio in cambios) cambio.FechaUtc = ComoUtc(cambio.FechaUtc);
+        return cambios;
+    }
 }

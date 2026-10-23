@@ -56,11 +56,17 @@ export function renderMenu(container, params) {
               <input type="text" id="prod-nombre" placeholder="Nombre del producto" class="input-field" required />
               <input type="text" id="prod-descripcion" placeholder="Descripción (opcional)" class="input-field" />
               <input type="number" id="prod-precio" placeholder="Precio" step="0.01" min="0" class="input-field" required />
+              <label class="block text-sm text-text-secondary">Forma de entrega del producto
+                <select id="prod-entrega" class="input-field" required><option value="">Selecciona una opción</option><option value="Recoleccion">Solo recoger</option><option value="Domicilio">Solo domicilio</option><option value="Ambas">Ambas al mismo precio</option></select>
+              </label>
+              <label class="block text-sm text-text-secondary">Fechas de servicio (opcional; una AAAA-MM-DD por línea). Vacío = disponible habitualmente.
+                <textarea id="prod-fechas" class="input-field" rows="2" placeholder="2026-10-24"></textarea>
+              </label>
               <label class="flex items-center justify-between gap-3 text-sm text-text-secondary cursor-pointer">
                 <span>Controlar inventario</span>
                 <input type="checkbox" id="prod-tiene-inventario" class="toggle-input" />
               </label>
-              <input type="number" id="prod-stock" placeholder="Stock" step="1" min="0" class="input-field hidden" />
+              <div id="prod-stock-wrap" class="hidden"><input type="number" id="prod-stock" placeholder="Stock" step="1" min="0" class="input-field" /></div>
               <div id="prod-msg" class="text-sm hidden text-center"></div>
               <div class="flex gap-2">
                 <button type="button" id="btn-cancelar" class="btn-ghost flex-1">Cancelar</button>
@@ -100,14 +106,11 @@ export function renderMenu(container, params) {
   container.querySelector('#btn-cancelar').addEventListener('click', () => {
     formSection.classList.add('hidden');
     container.querySelector('#form-producto').reset();
+    syncInventory();
     container.querySelector('#prod-msg').classList.add('hidden');
   });
 
-  const invToggle = container.querySelector('#prod-inventario');
-  const stockWrap = container.querySelector('#prod-stock-wrap');
-  invToggle?.addEventListener('change', () => {
-    stockWrap?.classList.toggle('hidden', !invToggle.checked);
-  });
+  const syncInventory = bindInventory(container, 'prod');
 
   container.querySelector('#form-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -118,20 +121,24 @@ export function renderMenu(container, params) {
         descripcion: container.querySelector('#prod-descripcion').value || null,
         precio: parseFloat(container.querySelector('#prod-precio').value),
         disponible: true,
+        entregaPermitida: container.querySelector('#prod-entrega').value,
+        fechasServicio: leerFechas(container.querySelector('#prod-fechas').value),
         tieneInventario: container.querySelector('#prod-tiene-inventario').checked,
         stock: container.querySelector('#prod-tiene-inventario').checked
-          ? parseInt(container.querySelector('#prod-stock').value, 10) || 0
+          ? container.querySelector('#prod-stock').valueAsNumber
           : null
       });
       msg.textContent = '¡Producto agregado! Agrega otro o cierra.';
       msg.className = 'text-sm text-success';
+      container.querySelector('#form-producto').reset();
+      syncInventory();
       container.querySelector('#prod-nombre').value = '';
       container.querySelector('#prod-descripcion').value = '';
       container.querySelector('#prod-precio').value = '';
       container.querySelector('#prod-nombre').focus();
       loadProductos(container.querySelector('#menu-list'));
     } catch (err) {
-      msg.textContent = 'Error al agregar producto';
+      msg.textContent = err.message || 'Error al agregar producto';
       msg.className = 'text-sm text-error';
     }
   });
@@ -164,6 +171,8 @@ async function loadProductos(container) {
               ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5">${p.descripcion}</p>` : ''}
               <div class="flex flex-wrap gap-1.5 mt-2">
                 <span class="badge badge-accent">$${p.precio.toFixed(2)}</span>
+                <span class="badge ${p.entregaPermitida ? 'badge-info' : 'badge-error'}">${p.entregaPermitida ? (p.entregaPermitida === 'Ambas' ? 'Recoger y domicilio' : p.entregaPermitida === 'Recoleccion' ? 'Solo recoger' : 'Solo domicilio') : 'Asignar entrega antes de vender'}</span>
+                ${p.fechasServicio?.length ? `<span class="badge badge-info">${p.fechasServicio.length} fechas</span>` : ''}
                 ${p.tieneInventario
                   ? `<span class="badge ${(p.stock ?? 0) > 0 ? 'bg-surface' : 'bg-error/10 text-error'}">
                       <i data-lucide="package" class="w-3.5 h-3.5"></i>
@@ -197,6 +206,12 @@ async function loadProductos(container) {
             <input type="text" id="edit-nombre" placeholder="Nombre" class="input-field" required />
             <input type="text" id="edit-descripcion" placeholder="Descripción" class="input-field" />
             <input type="number" id="edit-precio" placeholder="Precio" step="0.01" min="0" class="input-field" required />
+            <label class="block text-sm text-text-secondary">Forma de entrega del producto
+              <select id="edit-entrega" class="input-field" required><option value="">Selecciona una opción</option><option value="Recoleccion">Solo recoger</option><option value="Domicilio">Solo domicilio</option><option value="Ambas">Ambas al mismo precio</option></select>
+            </label>
+            <label class="block text-sm text-text-secondary">Fechas de servicio (una AAAA-MM-DD por línea; vacío = habitual)
+              <textarea id="edit-fechas" class="input-field" rows="2"></textarea>
+            </label>
             <label class="flex items-center justify-between gap-3 text-sm text-text-secondary cursor-pointer">
               <span>Controlar inventario</span>
               <input type="checkbox" id="edit-tiene-inventario" class="toggle-input" />
@@ -214,12 +229,20 @@ async function loadProductos(container) {
 
     if (window.lucide) lucide.createIcons();
 
+    const syncEditInventory = bindInventory(container, 'edit');
+
     container.querySelectorAll('.btn-edit').forEach(btn => {
       btn.addEventListener('click', () => {
+        const producto = productos.find(p => p.id === Number(btn.dataset.id));
+        container.querySelector('#edit-tiene-inventario').checked = producto.tieneInventario;
+        container.querySelector('#edit-stock').value = producto.stock ?? '';
+        syncEditInventory();
         container.querySelector('#edit-id').value = btn.dataset.id;
         container.querySelector('#edit-nombre').value = btn.dataset.nombre;
         container.querySelector('#edit-descripcion').value = btn.dataset.descripcion;
         container.querySelector('#edit-precio').value = btn.dataset.precio;
+        container.querySelector('#edit-entrega').value = producto.entregaPermitida || '';
+        container.querySelector('#edit-fechas').value = (producto.fechasServicio || []).join('\n');
         container.querySelector('#modal-editar').classList.remove('hidden');
       });
     });
@@ -237,15 +260,17 @@ async function loadProductos(container) {
           descripcion: container.querySelector('#edit-descripcion').value || null,
           precio: parseFloat(container.querySelector('#edit-precio').value),
           disponible: true,
+          entregaPermitida: container.querySelector('#edit-entrega').value,
+          fechasServicio: leerFechas(container.querySelector('#edit-fechas').value),
           tieneInventario: container.querySelector('#edit-tiene-inventario').checked,
           stock: container.querySelector('#edit-tiene-inventario').checked
-            ? parseInt(container.querySelector('#edit-stock').value, 10) || 0
+            ? container.querySelector('#edit-stock').valueAsNumber
             : null
         });
         container.querySelector('#modal-editar').classList.add('hidden');
         loadProductos(container);
       } catch (err) {
-        alert('Error al guardar');
+        alert(err.message || 'Error al guardar');
       }
     });
 
@@ -267,4 +292,27 @@ async function loadProductos(container) {
     `;
     if (window.lucide) lucide.createIcons();
   }
+}
+
+function bindInventory(container, prefix) {
+  const toggle = container.querySelector('#' + prefix + '-tiene-inventario');
+  const wrap = container.querySelector('#' + prefix + '-stock-wrap');
+  const stock = container.querySelector('#' + prefix + '-stock');
+  const sync = () => {
+    wrap.classList.toggle('hidden', !toggle.checked);
+    stock.required = toggle.checked;
+    stock.disabled = !toggle.checked;
+    if (!toggle.checked) stock.value = '';
+  };
+  toggle.addEventListener('change', sync);
+  sync();
+  return sync;
+}
+
+function leerFechas(texto) {
+  return [...new Set(texto.split('\n').map(x => x.trim()).filter(Boolean))].map(fecha => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Number.isNaN(Date.parse(`${fecha}T00:00:00Z`)))
+      throw new Error('Usa una fecha AAAA-MM-DD por línea.');
+    return fecha;
+  });
 }

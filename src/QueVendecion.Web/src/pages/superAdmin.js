@@ -39,7 +39,7 @@ function renderLogin(container) {
         <div class="card-elevated">
           <div id="sa-msg" class="text-sm text-error mb-3 hidden text-center"></div>
           <form id="sa-form" class="space-y-3">
-            <input type="email" id="sa-email" placeholder="Email" class="input-field" value="marco.cisneros@gmail.com" required />
+            <input type="email" id="sa-email" placeholder="Email" class="input-field" autocomplete="email" required />
             <input type="password" id="sa-password" placeholder="Password" class="input-field" required />
             <button type="submit" class="btn-primary w-full">
               <i data-lucide="log-in" class="w-5 h-5"></i> Entrar

@@ -15,6 +15,8 @@ public class ProductoConfiguration : IEntityTypeConfiguration<Producto>
         builder.Property(p => p.ImagenUrl).HasMaxLength(500);
         builder.Property(p => p.TieneInventario).HasDefaultValue(false);
         builder.Property(p => p.Stock).HasDefaultValue(null);
+        builder.Property(p => p.FechasServicioJson).HasColumnType("text");
+        builder.Property(p => p.EntregaPermitida).IsRequired(false);
         builder.HasOne(p => p.Tienda)
             .WithMany(t => t.Productos)
             .HasForeignKey(p => p.TiendaId);

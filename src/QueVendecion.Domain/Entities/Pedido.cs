@@ -15,6 +15,13 @@ public class Pedido
     public string? Observaciones { get; set; }
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
     public DateTime? ActualizadoEn { get; set; }
+    public ModalidadPedido? Modalidad { get; set; }
+    public FormaEntrega? Entrega { get; set; }
+    public string? DireccionEntrega { get; set; }
+    public DateOnly? FechaServicio { get; set; }
+    public string? VentanaSolicitada { get; set; }
+    public string? HorarioConfirmado { get; set; }
+    public string? HistorialEstadosJson { get; set; }
 
     public Tienda Tienda { get; set; } = null!;
     public Cliente? Cliente { get; set; }

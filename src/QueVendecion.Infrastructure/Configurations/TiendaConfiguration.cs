@@ -14,5 +14,6 @@ public class TiendaConfiguration : IEntityTypeConfiguration<Tienda>
         builder.HasIndex(t => t.Slug).IsUnique();
         builder.Property(t => t.Direccion).HasMaxLength(200);
         builder.Property(t => t.Telefono).HasMaxLength(20);
+        builder.Property(t => t.OperacionJson).HasColumnType("text");
     }
 }

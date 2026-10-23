@@ -9,5 +9,6 @@ public interface ITiendaService
     Task<List<TiendaDto>> ObtenerTodasAsync();
     Task<TiendaDto> CrearAsync(CrearTiendaDto dto);
     Task<TiendaDto?> ActualizarAsync(int id, CrearTiendaDto dto);
+    Task<TiendaDto?> ActualizarOperacionAsync(int id, OperacionTiendaDto dto);
     Task<bool> EliminarAsync(int id);
 }

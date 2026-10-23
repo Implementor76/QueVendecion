@@ -8,10 +8,11 @@ public static class TestDbContextFactory
     public static QueVendecionDbContext Create()
     {
         var options = new DbContextOptionsBuilder<QueVendecionDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseSqlite("Data Source=:memory:")
             .Options;
 
         var context = new QueVendecionDbContext(options);
+        context.Database.OpenConnection();
         context.Database.EnsureCreated();
         return context;
     }
