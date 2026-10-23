@@ -61,6 +61,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.Property<int>("Cantidad")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("CostoUnitarioHistorico")
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<int>("PedidoId")
                         .HasColumnType("integer");
 
@@ -90,6 +93,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.Property<int>("Cantidad")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("CostoUnitario")
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<DateTime>("Fecha")
                         .HasColumnType("timestamp with time zone");
 
@@ -110,6 +116,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                         .HasColumnType("integer");
 
                     b.Property<int>("Tipo")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("UsuarioId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -148,6 +157,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
 
                     b.Property<int?>("Entrega")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EntregadoEnUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Estado")
                         .HasColumnType("integer");
@@ -189,6 +201,8 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
 
                     b.HasIndex("ClienteId");
 
+                    b.HasIndex("TiendaId", "EntregadoEnUtc");
+
                     b.HasIndex("TiendaId", "FechaServicio", "Estado");
 
                     b.ToTable("Pedidos");
@@ -202,6 +216,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal?>("CostoUnitario")
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<DateTime>("CreadoEn")
                         .HasColumnType("timestamp with time zone");
 
@@ -213,6 +230,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                         .HasColumnType("boolean");
 
                     b.Property<int?>("EntregaPermitida")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExistenciaMinima")
                         .HasColumnType("integer");
 
                     b.Property<string>("FechasServicioJson")

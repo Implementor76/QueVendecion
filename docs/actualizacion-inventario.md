@@ -1,5 +1,11 @@
 # Alta de productos e inventario
 
+**Actualización posterior:** la etapa de costos e inventario por tienda cambia
+la regla de desactivación descrita abajo. Una vez activado, el inventario no se
+desactiva; las existencias cambian por compras y ajustes, con movimiento.
+Consultar [costos-inventario.md](costos-inventario.md). Se conserva abajo el
+contexto de la primera implementación.
+
 ## Corrección
 
 Alta y edición usan el mismo comportamiento: al activar inventario, el stock

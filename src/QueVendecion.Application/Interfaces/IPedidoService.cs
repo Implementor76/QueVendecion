@@ -5,6 +5,7 @@ namespace QueVendecion.Application.Interfaces;
 
 public interface IPedidoService
 {
+    Task<ResumenVentasDto> ResumenVentasAsync(int tiendaId, DateOnly desde, DateOnly hasta);
     Task<List<PedidoDto>> ObtenerPorTiendaAsync(int tiendaId, EstadoPedido? estado = null, DateOnly? fechaServicio = null);
     Task<List<PedidoDto>> ObtenerPorClienteAsync(int tiendaId, int clienteId);
     Task<PedidoDto?> ObtenerPorIdAsync(int id);

@@ -50,9 +50,13 @@ export const api = {
     getByMiTienda: () => request('/tiendas/mi-tienda/productos'),
     create: (data) => request('/tiendas/mi-tienda/productos', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/tiendas/mi-tienda/productos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    compra: (id, data) => request(`/tiendas/mi-tienda/productos/${id}/compras`, { method: 'POST', body: JSON.stringify(data) }),
+    ajuste: (id, data) => request(`/tiendas/mi-tienda/productos/${id}/ajustes`, { method: 'POST', body: JSON.stringify(data) }),
+    movimientos: (id) => request(`/tiendas/mi-tienda/productos/${id}/movimientos`),
     delete: (id) => request(`/tiendas/mi-tienda/productos/${id}`, { method: 'DELETE' })
   },
   pedidos: {
+    resumen: (desde, hasta) => request(`/pedidos/mi-tienda/resumen?${new URLSearchParams({ desde, hasta })}`),
     getMisPedidos: (estado, fechaServicio) => {
       const params = new URLSearchParams();
       if (estado) params.set('estado', estado);

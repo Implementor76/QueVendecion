@@ -12,6 +12,7 @@ public class ProductoConfiguration : IEntityTypeConfiguration<Producto>
         builder.Property(p => p.Nombre).IsRequired().HasMaxLength(100);
         builder.Property(p => p.Descripcion).HasMaxLength(500);
         builder.Property(p => p.Precio).HasColumnType("decimal(18,2)");
+        builder.Property(p => p.CostoUnitario).HasColumnType("decimal(18,4)");
         builder.Property(p => p.ImagenUrl).HasMaxLength(500);
         builder.Property(p => p.TieneInventario).HasDefaultValue(false);
         builder.Property(p => p.Stock).HasDefaultValue(null);

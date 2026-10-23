@@ -56,6 +56,7 @@ export function renderMenu(container, params) {
               <input type="text" id="prod-nombre" placeholder="Nombre del producto" class="input-field" required />
               <input type="text" id="prod-descripcion" placeholder="Descripción (opcional)" class="input-field" />
               <input type="number" id="prod-precio" placeholder="Precio" step="0.01" min="0" class="input-field" required />
+              <label class="block text-sm">Costo unitario de referencia (opcional)<input type="number" id="prod-costo" step="0.0001" min="0" class="input-field" placeholder="Desconocido"></label>
               <label class="block text-sm text-text-secondary">Forma de entrega del producto
                 <select id="prod-entrega" class="input-field" required><option value="">Selecciona una opción</option><option value="Recoleccion">Solo recoger</option><option value="Domicilio">Solo domicilio</option><option value="Ambas">Ambas al mismo precio</option></select>
               </label>
@@ -67,6 +68,7 @@ export function renderMenu(container, params) {
                 <input type="checkbox" id="prod-tiene-inventario" class="toggle-input" />
               </label>
               <div id="prod-stock-wrap" class="hidden"><input type="number" id="prod-stock" placeholder="Stock" step="1" min="0" class="input-field" /></div>
+              <label class="block text-sm">Existencia mínima (opcional)<input type="number" id="prod-minimo" step="1" min="0" class="input-field"></label>
               <div id="prod-msg" class="text-sm hidden text-center"></div>
               <div class="flex gap-2">
                 <button type="button" id="btn-cancelar" class="btn-ghost flex-1">Cancelar</button>
@@ -120,6 +122,8 @@ export function renderMenu(container, params) {
         nombre: container.querySelector('#prod-nombre').value,
         descripcion: container.querySelector('#prod-descripcion').value || null,
         precio: parseFloat(container.querySelector('#prod-precio').value),
+        costoUnitario: container.querySelector('#prod-costo').value === '' ? null : Number(container.querySelector('#prod-costo').value),
+        existenciaMinima: container.querySelector('#prod-tiene-inventario').checked && container.querySelector('#prod-minimo').value !== '' ? Number(container.querySelector('#prod-minimo').value) : null,
         disponible: true,
         entregaPermitida: container.querySelector('#prod-entrega').value,
         fechasServicio: leerFechas(container.querySelector('#prod-fechas').value),
@@ -164,6 +168,7 @@ async function loadProductos(container) {
 
     container.innerHTML = `
       <div class="space-y-3">
+        <a href="/inventario" data-link class="card block text-primary font-semibold">Inventario, compras y ventas →</a>
         ${productos.map((p, i) => `
           <div class="card flex justify-between items-center animate-fade-in" style="animation-delay:${i * 40}ms" data-id="${p.id}">
             <div class="flex-1 mr-3">
@@ -206,6 +211,7 @@ async function loadProductos(container) {
             <input type="text" id="edit-nombre" placeholder="Nombre" class="input-field" required />
             <input type="text" id="edit-descripcion" placeholder="Descripción" class="input-field" />
             <input type="number" id="edit-precio" placeholder="Precio" step="0.01" min="0" class="input-field" required />
+            <label class="block text-sm">Costo unitario de referencia (opcional)<input type="number" id="edit-costo" step="0.0001" min="0" class="input-field"></label>
             <label class="block text-sm text-text-secondary">Forma de entrega del producto
               <select id="edit-entrega" class="input-field" required><option value="">Selecciona una opción</option><option value="Recoleccion">Solo recoger</option><option value="Domicilio">Solo domicilio</option><option value="Ambas">Ambas al mismo precio</option></select>
             </label>
@@ -219,6 +225,7 @@ async function loadProductos(container) {
             <div id="edit-stock-wrap" class="hidden">
               <input type="number" id="edit-stock" placeholder="Stock" step="1" min="0" class="input-field" />
             </div>
+            <label class="block text-sm">Existencia mínima (opcional)<input type="number" id="edit-minimo" step="1" min="0" class="input-field"></label>
             <button type="submit" class="btn-accent w-full">
               <i data-lucide="check" class="w-4 h-4"></i> Guardar
             </button>
@@ -236,6 +243,10 @@ async function loadProductos(container) {
         const producto = productos.find(p => p.id === Number(btn.dataset.id));
         container.querySelector('#edit-tiene-inventario').checked = producto.tieneInventario;
         container.querySelector('#edit-stock').value = producto.stock ?? '';
+        container.querySelector('#edit-stock').readOnly = producto.tieneInventario;
+        container.querySelector('#edit-tiene-inventario').disabled = producto.tieneInventario;
+        container.querySelector('#edit-costo').value = producto.costoUnitario ?? '';
+        container.querySelector('#edit-minimo').value = producto.existenciaMinima ?? '';
         syncEditInventory();
         container.querySelector('#edit-id').value = btn.dataset.id;
         container.querySelector('#edit-nombre').value = btn.dataset.nombre;
@@ -259,6 +270,8 @@ async function loadProductos(container) {
           nombre: container.querySelector('#edit-nombre').value,
           descripcion: container.querySelector('#edit-descripcion').value || null,
           precio: parseFloat(container.querySelector('#edit-precio').value),
+          costoUnitario: container.querySelector('#edit-costo').value === '' ? null : Number(container.querySelector('#edit-costo').value),
+          existenciaMinima: container.querySelector('#edit-tiene-inventario').checked && container.querySelector('#edit-minimo').value !== '' ? Number(container.querySelector('#edit-minimo').value) : null,
           disponible: true,
           entregaPermitida: container.querySelector('#edit-entrega').value,
           fechasServicio: leerFechas(container.querySelector('#edit-fechas').value),

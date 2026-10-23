@@ -15,6 +15,7 @@ public class MigracionesPostgreSqlTests
     private const string Operacion = "20261022054127_AgregarOperacionTienda";
     private const string Direccion = "20261022055059_AgregarDireccionEntrega";
     private const string EntregaEstados = "20261022060414_AsignarEntregaYRegistrarEstados";
+    private const string Costos = "20261023064705_AgregarCostosYResumen";
 
     private static QueVendecionDbContext Create() => new(new DbContextOptionsBuilder<QueVendecionDbContext>()
         .UseNpgsql("Host=localhost;Database=design_only;Username=design_only").Options);
@@ -45,7 +46,7 @@ public class MigracionesPostgreSqlTests
     {
         using var db = Create();
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(new[] { Baseline, Inventario, Operacion, Direccion, EntregaEstados }, db.Database.GetMigrations());
+        Assert.Equal(new[] { Baseline, Inventario, Operacion, Direccion, EntregaEstados, Costos }, db.Database.GetMigrations());
     }
 
     [Fact]
@@ -72,6 +73,21 @@ public class MigracionesPostgreSqlTests
     }
 
     [Fact]
+    public void CostosSoloAgregaColumnasEIndice()
+    {
+        var migration = new AgregarCostosYResumen { ActiveProvider = Provider };
+        Assert.All(migration.UpOperations, op => Assert.True(op is AddColumnOperation or CreateIndexOperation));
+        Assert.Equal(6, migration.UpOperations.OfType<AddColumnOperation>().Count());
+        Assert.All(migration.UpOperations.OfType<AddColumnOperation>(), c => Assert.True(c.IsNullable));
+        using var db = Create();
+        var sql = db.GetService<IMigrator>().GenerateScript(EntregaEstados, Costos, MigrationsSqlGenerationOptions.Idempotent);
+        Assert.Contains("CostoUnitarioHistorico", sql);
+        Assert.Contains("EntregadoEnUtc", sql);
+        Assert.DoesNotContain("DROP TABLE", sql);
+        Assert.DoesNotContain("UPDATE \"Productos\"", sql);
+    }
+
+    [Fact]
     public async Task PuenteSqliteRechazaPostgreSqlAntesDeConectar()
     {
         using var db = Create();
@@ -85,5 +101,7 @@ public class MigracionesPostgreSqlTests
         Assert.Throws<NotSupportedException>(() => new EsquemaAnteriorInventario { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
         Assert.Throws<NotSupportedException>(() => new AgregarInventario { ActiveProvider = Provider }.DownOperations);
         Assert.Throws<NotSupportedException>(() => new EsquemaAnteriorInventario { ActiveProvider = Provider }.DownOperations);
+        Assert.Throws<NotSupportedException>(() => new AgregarCostosYResumen { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
+        Assert.Throws<NotSupportedException>(() => new AgregarCostosYResumen { ActiveProvider = Provider }.DownOperations);
     }
 }

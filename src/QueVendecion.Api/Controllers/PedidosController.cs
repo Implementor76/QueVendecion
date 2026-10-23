@@ -21,6 +21,10 @@ public class PedidosController : ControllerBase
 
     private int GetTiendaId() => int.Parse(User.FindFirst("TiendaId")?.Value ?? "0");
 
+    [HttpGet("mi-tienda/resumen")]
+    public async Task<ActionResult<ResumenVentasDto>> Resumen([FromQuery] DateOnly desde, [FromQuery] DateOnly hasta) =>
+        await _pedidoService.ResumenVentasAsync(GetTiendaId(), desde, hasta);
+
     [HttpGet("mi-tienda")]
     public async Task<ActionResult<List<PedidoDto>>> ObtenerMisPedidos([FromQuery] EstadoPedido? estado, [FromQuery] DateOnly? fechaServicio)
     {

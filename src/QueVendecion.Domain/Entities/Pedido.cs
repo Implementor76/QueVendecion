@@ -15,6 +15,7 @@ public class Pedido
     public string? Observaciones { get; set; }
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
     public DateTime? ActualizadoEn { get; set; }
+    public DateTime? EntregadoEnUtc { get; set; }
     public ModalidadPedido? Modalidad { get; set; }
     public FormaEntrega? Entrega { get; set; }
     public string? DireccionEntrega { get; set; }

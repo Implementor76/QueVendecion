@@ -18,3 +18,8 @@ export function fechaHoraEnTienda(instanteUtc, zonaHoraria) {
   const { day, month, year, hour, minute } = partesEnTienda(instanteUtc, zonaHoraria);
   return `${day}/${month}/${year} ${hour}:${minute}`;
 }
+
+export function fechaHoyEnTienda(zonaHoraria, ahora = new Date()) {
+  const { day, month, year } = partesEnTienda(ahora, zonaHoraria);
+  return `${year}-${month}-${day}`;
+}

@@ -19,6 +19,44 @@ public class PedidoService : IPedidoService
         _context = context;
     }
 
+    public async Task<ResumenVentasDto> ResumenVentasAsync(int tiendaId, DateOnly desde, DateOnly hasta)
+    {
+        if (desde == default || hasta == default || hasta < desde || hasta.DayNumber - desde.DayNumber > 366)
+            throw new ReglaNegocioException("rango_invalido", "Elige un rango de hasta 366 días.");
+        var tienda = await _context.Tiendas.FindAsync(tiendaId)
+            ?? throw new ReglaNegocioException("tienda_no_disponible", "Tienda no encontrada.");
+        var zona = TimeZoneInfo.FindSystemTimeZoneById(OperacionReglas.Leer(tienda).ZonaHoraria);
+        var pedidos = await _context.Pedidos.AsNoTracking().Include(p => p.Items)
+            .Where(p => p.TiendaId == tiendaId).ToListAsync();
+        var resumen = new ResumenVentasDto { PedidosPorAtender = pedidos.Count(p => p.Estado is not (EstadoPedido.Entregado or EstadoPedido.Cancelado)) };
+        foreach (var pedido in pedidos.Where(p => p.Estado == EstadoPedido.Entregado))
+        {
+            var instante = pedido.EntregadoEnUtc;
+            if (!instante.HasValue && !string.IsNullOrWhiteSpace(pedido.HistorialEstadosJson))
+                instante = JsonSerializer.Deserialize<List<CambioEstadoPedidoDto>>(pedido.HistorialEstadosJson)?
+                    .LastOrDefault(c => c.Nuevo == EstadoPedido.Entregado)?.FechaUtc;
+            if (!instante.HasValue) { resumen.EntregadosSinInstante++; continue; }
+            var dia = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(ComoUtc(instante.Value), zona));
+            if (dia < desde || dia > hasta) continue;
+            resumen.PedidosEntregados++;
+            resumen.VentasEntregadas += pedido.Total;
+            if (pedido.EstadoPago == EstadoPago.Pagado) resumen.EntregadoPagado += pedido.Total;
+            else resumen.EntregadoPendienteCobro += pedido.Total;
+            foreach (var item in pedido.Items)
+            {
+                if (item.CostoUnitarioHistorico.HasValue)
+                {
+                    resumen.CostoRegistrado += item.CostoUnitarioHistorico.Value * item.Cantidad;
+                    resumen.UtilidadBrutaEstimada += (item.PrecioUnitario - item.CostoUnitarioHistorico.Value) * item.Cantidad;
+                }
+                else { resumen.LineasSinCosto++; resumen.ImporteSinCosto += item.Subtotal; }
+            }
+        }
+        resumen.CostoRegistrado = Math.Round(resumen.CostoRegistrado, 2);
+        resumen.UtilidadBrutaEstimada = Math.Round(resumen.UtilidadBrutaEstimada, 2);
+        return resumen;
+    }
+
     public async Task<List<PedidoDto>> ObtenerPorTiendaAsync(int tiendaId, EstadoPedido? estado = null, DateOnly? fechaServicio = null)
     {
         var query = _context.Pedidos
@@ -110,7 +148,8 @@ public class PedidoService : IPedidoService
             {
                 ProductoId = itemDto.ProductoId,
                 Cantidad = itemDto.Cantidad,
-                PrecioUnitario = producto.Precio
+                PrecioUnitario = producto.Precio,
+                CostoUnitarioHistorico = producto.CostoUnitario
             };
 
             pedido.Items.Add(item);
@@ -183,6 +222,7 @@ public class PedidoService : IPedidoService
         var estadoAnterior = pedido.Estado;
         pedido.Estado = estado;
         pedido.ActualizadoEn = DateTime.UtcNow;
+        if (estado == EstadoPedido.Entregado) pedido.EntregadoEnUtc = pedido.ActualizadoEn;
         var historial = string.IsNullOrWhiteSpace(pedido.HistorialEstadosJson)
             ? new List<CambioEstadoPedidoDto>()
             : JsonSerializer.Deserialize<List<CambioEstadoPedidoDto>>(pedido.HistorialEstadosJson) ?? new();
@@ -215,6 +255,7 @@ public class PedidoService : IPedidoService
                     StockAnterior = stockAnterior,
                     StockNuevo = producto.Stock.Value,
                     PedidoId = pedido.Id,
+                    UsuarioId = usuarioId,
                     Observaciones = "Reintegro por cancelación de pedido"
                 });
             }

@@ -23,10 +23,10 @@ public class ProductosController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<ProductoDto>> ObtenerPorId(int id)
+    public async Task<ActionResult<ProductoDto>> ObtenerPorId(int tiendaId, int id)
     {
         var producto = await _productoService.ObtenerPorIdAsync(id);
-        if (producto == null) return NotFound();
+        if (producto == null || producto.TiendaId != tiendaId) return NotFound();
         return producto;
     }
 
@@ -35,7 +35,8 @@ public class ProductosController : ControllerBase
     public async Task<ActionResult<ProductoDto>> Crear(int tiendaId, [FromBody] CrearProductoDto dto)
     {
         if (User.FindFirst("TiendaId")?.Value != tiendaId.ToString()) return Forbid();
-        var producto = await _productoService.CrearAsync(tiendaId, dto);
+        var usuarioId = int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : (int?)null;
+        var producto = await _productoService.CrearAsync(tiendaId, dto, usuarioId);
         return CreatedAtAction(nameof(ObtenerPorId), new { tiendaId, id = producto.Id }, producto);
     }
 
@@ -46,7 +47,8 @@ public class ProductosController : ControllerBase
         if (User.FindFirst("TiendaId")?.Value != tiendaId.ToString()) return Forbid();
         var existente = await _productoService.ObtenerPorIdAsync(id);
         if (existente == null || existente.TiendaId != tiendaId) return NotFound();
-        var producto = await _productoService.ActualizarAsync(id, dto);
+        var usuarioId = int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var parsed) ? parsed : (int?)null;
+        var producto = await _productoService.ActualizarAsync(id, dto, usuarioId);
         if (producto == null) return NotFound();
         return producto;
     }

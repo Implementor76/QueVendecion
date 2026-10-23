@@ -46,7 +46,7 @@ public static class InventarioSchemaUpgrade
                 throw new InvalidOperationException("Esquema de inventario pendiente. Ejecuta InventarioSchemaUpgrade.AplicarAsync antes de consultar las entidades.");
         }
         await db.Productos.AsNoTracking().OrderBy(p => p.Id).Select(p => new { p.Id, p.TieneInventario, p.Stock }).Take(1).ToListAsync();
-        await db.MovimientosInventario.AsNoTracking().OrderBy(m => m.Id).Take(1).ToListAsync();
+        await db.MovimientosInventario.AsNoTracking().OrderBy(m => m.Id).Select(m => m.Id).Take(1).ToListAsync();
         if (await db.Productos.AnyAsync(p => p.TieneInventario && (p.Stock == null || p.Stock < 0)))
             throw new InvalidOperationException("Hay inventarios inválidos. Revísalos antes de completar la actualización.");
     }

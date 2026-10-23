@@ -120,6 +120,7 @@ async function loadTienda(container) {
         </div>
 
         <div class="grid grid-cols-2 gap-3">
+          <a href="/inventario" data-link class="card flex flex-col items-center gap-2 py-5 text-center"><span class="font-semibold text-primary text-sm">Inventario y ventas</span></a>
           <a href="/menu" data-link class="card flex flex-col items-center gap-2 py-5 text-center">
             <div class="w-12 h-12 rounded-2xl bg-accent/15 flex items-center justify-center">
               <i data-lucide="utensils" class="w-6 h-6 text-primary"></i>

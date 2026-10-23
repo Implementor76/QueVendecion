@@ -187,3 +187,10 @@ Las pruebas verifican el SQL generado por Npgsql, que el cambio es aditivo,
 el snapshot, el rechazo del puente SQLite en PostgreSQL y las regresiones SQLite.
 La validación final de scripts, baseline y preservación sobre PostgreSQL requiere
 una copia restaurada del motor real antes de producción.
+
+## Etapa posterior de costos e inventario
+
+La migración PostgreSQL aditiva `20261023064705_AgregarCostosYResumen` y el
+puente SQLite de esta etapa se describen en
+[costos-inventario.md](costos-inventario.md). El procedimiento histórico anterior
+sigue siendo útil para el baseline y las migraciones anteriores.

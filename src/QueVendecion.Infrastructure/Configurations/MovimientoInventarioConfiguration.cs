@@ -10,6 +10,7 @@ public class MovimientoInventarioConfiguration : IEntityTypeConfiguration<Movimi
     {
         builder.HasKey(m => m.Id);
         builder.Property(m => m.Observaciones).HasMaxLength(200);
+        builder.Property(m => m.CostoUnitario).HasColumnType("decimal(18,4)");
         builder.HasOne(m => m.Producto)
             .WithMany(p => p.Movimientos)
             .HasForeignKey(m => m.ProductoId);

@@ -49,7 +49,7 @@ public class InventarioTests
     }
 
     [Fact]
-    public async Task ActivaYDesactivaInventario()
+    public async Task ActivaYProtegeInventario()
     {
         using var db = TestDbContextFactory.Create();
         var service = new ProductoService(db);
@@ -57,7 +57,8 @@ public class InventarioTests
         var dto = new CrearProductoDto { Nombre = "Hielo", TieneInventario = true, Stock = 10 };
         Assert.Equal(10, (await service.ActualizarAsync(p.Id, dto))!.Stock);
         dto.TieneInventario = false;
-        Assert.Null((await service.ActualizarAsync(p.Id, dto))!.Stock);
+        await Assert.ThrowsAsync<ReglaNegocioException>(() => service.ActualizarAsync(p.Id, dto));
+        Assert.Equal(10, (await service.ObtenerPorIdAsync(p.Id))!.Stock);
     }
 
     private static CrearPedidoDto Pedido(int tienda, int producto, params int[] cantidades) => new()
@@ -76,7 +77,7 @@ public class InventarioTests
         var pedido = await service.CrearAsync(Pedido(tienda, p.Id, 1, 2));
         Assert.Single(pedido.Items);
         Assert.Equal(7, (await db.Productos.FindAsync(p.Id))!.Stock);
-        var salida = await db.MovimientosInventario.SingleAsync();
+        var salida = await db.MovimientosInventario.SingleAsync(m => m.Tipo == TipoMovimiento.Salida);
         Assert.Equal(TipoMovimiento.Salida, salida.Tipo);
         Assert.Equal(3, salida.Cantidad);
         await Assert.ThrowsAsync<ReglaNegocioException>(() => service.CrearAsync(Pedido(tienda, p.Id, 4, 4)));
@@ -105,7 +106,7 @@ public class InventarioTests
         Assert.Equal(2, entregado.HistorialEstados.Count(h => h.UsuarioId == 7));
         await service.ActualizarEstadoAsync(pedido.Id, EstadoPedido.Entregado, 7);
         Assert.Equal(3, (await db.Productos.FindAsync(producto.Id))!.Stock);
-        Assert.Single(await db.MovimientosInventario.ToListAsync());
+        Assert.Equal(1, await db.MovimientosInventario.CountAsync(m => m.Tipo == TipoMovimiento.Salida));
         await Assert.ThrowsAsync<ReglaNegocioException>(() => service.ActualizarEstadoAsync(pedido.Id, EstadoPedido.Cancelado));
     }
 
@@ -151,7 +152,7 @@ public class InventarioTests
             {
                 Assert.Equal(3, (await check.Productos.SingleAsync()).Stock);
                 Assert.Equal(1, await check.Pedidos.CountAsync());
-                Assert.Equal(1, await check.MovimientosInventario.CountAsync());
+                Assert.Equal(1, await check.MovimientosInventario.CountAsync(m => m.Tipo == TipoMovimiento.Salida));
             }
             using var cancelStart = new Barrier(2);
             await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
@@ -211,7 +212,7 @@ public class InventarioTests
         await InventarioSchemaUpgrade.AplicarAsync(db);
         db.ChangeTracker.Clear();
         Assert.Equal(7, (await db.Productos.SingleAsync()).Stock);
-        var movimiento = await db.MovimientosInventario.SingleAsync();
+        var movimiento = await db.MovimientosInventario.SingleAsync(m => m.Tipo == TipoMovimiento.Salida);
         Assert.Equal(pedido.Id, movimiento.PedidoId);
         Assert.Equal(3, movimiento.Cantidad);
         Assert.Equal(10, movimiento.StockAnterior);

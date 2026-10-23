@@ -42,13 +42,17 @@ public class ProductoHttpTests
         using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
         client.DefaultRequestHeaders.Add("X-Test-Tienda", tienda.Id.ToString());
         var response = await client.PostAsJsonAsync("/api/tiendas/mi-tienda/productos",
-            new CrearProductoDto { Nombre = "Hielo", TieneInventario = true, Stock = 10 });
+            new CrearProductoDto { Nombre = "Hielo", TieneInventario = true, Stock = 10, CostoUnitario = 3.9167m, ExistenciaMinima = 2 });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.NotNull(response.Headers.Location);
         Assert.Contains("/mi-tienda/productos/", response.Headers.Location.ToString());
         var get = await client.GetAsync(response.Headers.Location);
         Assert.Equal(HttpStatusCode.OK, get.StatusCode);
         Assert.Equal(10, (await get.Content.ReadFromJsonAsync<ProductoDto>())!.Stock);
+        Assert.Contains("costoUnitario", await get.Content.ReadAsStringAsync());
+        var publicCatalog = await client.GetAsync($"/api/tiendas/{tienda.Id}/productos");
+        Assert.Equal(HttpStatusCode.OK, publicCatalog.StatusCode);
+        Assert.DoesNotContain("costoUnitario", await publicCatalog.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
         client.DefaultRequestHeaders.Remove("X-Test-Tienda");
         client.DefaultRequestHeaders.Add("X-Test-Tienda", (tienda.Id + 1).ToString());
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(response.Headers.Location)).StatusCode);

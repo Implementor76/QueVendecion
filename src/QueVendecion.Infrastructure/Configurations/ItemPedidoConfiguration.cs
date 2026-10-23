@@ -10,6 +10,7 @@ public class ItemPedidoConfiguration : IEntityTypeConfiguration<ItemPedido>
     {
         builder.HasKey(i => i.Id);
         builder.Property(i => i.PrecioUnitario).HasColumnType("decimal(18,2)");
+        builder.Property(i => i.CostoUnitarioHistorico).HasColumnType("decimal(18,4)");
         builder.HasOne(i => i.Pedido)
             .WithMany(p => p.Items)
             .HasForeignKey(i => i.PedidoId);

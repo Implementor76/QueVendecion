@@ -90,6 +90,16 @@ using (var scope = app.Services.CreateScope())
         if (!app.Environment.IsDevelopment() || !db.Database.IsSqlite())
             throw new InvalidOperationException("--upgrade-operation solo está permitido con SQLite en Development.");
         await OperacionSchemaUpgrade.AplicarAsync(db);
+        await CostosSchemaUpgrade.AplicarAsync(db);
+        return;
+    }
+    if (args.Contains("--upgrade-costos"))
+    {
+        if (!app.Environment.IsDevelopment() || !db.Database.IsSqlite())
+            throw new InvalidOperationException("--upgrade-costos solo está permitido con SQLite en Development.");
+        await InventarioSchemaUpgrade.AplicarAsync(db);
+        await OperacionSchemaUpgrade.AplicarAsync(db);
+        await CostosSchemaUpgrade.AplicarAsync(db);
         return;
     }
     if (app.Environment.IsDevelopment()) db.Database.EnsureCreated();
@@ -98,6 +108,7 @@ using (var scope = app.Services.CreateScope())
     {
         await InventarioSchemaUpgrade.AplicarAsync(db);
         await OperacionSchemaUpgrade.AplicarAsync(db);
+        await CostosSchemaUpgrade.AplicarAsync(db);
     }
     else
     {
@@ -105,6 +116,7 @@ using (var scope = app.Services.CreateScope())
             throw new InvalidOperationException("Hay migraciones pendientes. Aplica las migraciones durante el despliegue antes de iniciar la API. No borres ni recrees la base.");
         await InventarioSchemaUpgrade.VerificarAsync(db);
         await OperacionSchemaUpgrade.VerificarAsync(db);
+        await CostosSchemaUpgrade.VerificarAsync(db);
     }
 
     if (!db.UsuariosTienda.Any(u => u.Rol == RolUsuario.SuperAdmin))

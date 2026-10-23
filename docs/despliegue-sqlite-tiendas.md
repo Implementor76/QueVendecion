@@ -1,5 +1,9 @@
 # Preparación de despliegue con SQLite existente
 
+**Etapa posterior:** el procedimiento y ensayo de costos e inventario está en
+[costos-inventario.md](costos-inventario.md). La publicación de operación y
+corrección de horas ya se realizó; costos e inventario aún no se publican.
+
 Este documento conserva el plan previo a la publicación. **Actualización del 22 de octubre de 2026:** la versión de operación por tienda se publicó manualmente en `srvubu01`. El servicio efectivo corre en `Development` con la SQLite activa `/opt/apps/quevendecion/QueVendecion.db`; la API está en el puerto 5010 y el frontend en `/var/www/quevendecion`. La selección de proveedor en el código sigue siendo `Production` → Npgsql y otros entornos → SQLite. Los diagnósticos pendientes de las secciones históricas deben leerse a la luz de estos datos confirmados.
 
 ## Diagnóstico pendiente en el servidor
