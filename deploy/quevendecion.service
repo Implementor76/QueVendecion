@@ -14,7 +14,7 @@ Environment=ASPNETCORE_URLS=http://0.0.0.0:5010
 
 # Secrets — CAMBIAR estos valores
 Environment=Jwt__Key=TU_SECRET_AQUI
-Environment=ConnectionStrings__DefaultConnection=Host=192.168.1.4;Port=5432;Database=quevendecion;Username=api_user;Password=C@r0l1na10
+Environment=ConnectionStrings__DefaultConnection=Host=SERVIDOR_BD;Port=5432;Database=quevendecion;Username=USUARIO;Password=VALOR_PRIVADO
 
 [Install]
 WantedBy=multi-user.target

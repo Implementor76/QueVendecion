@@ -27,7 +27,7 @@ builder.Services.AddControllers()
 ### 3. DB vieja con schema nuevo
 **Qué pasó:** `EnsureCreated()` no actualiza tablas existentes. Si agregas un campo nuevo a una entidad, la DB vieja no lo tiene y el ORM falla.
 
-**Solución:** Borrar `QueVendecion.db` cada vez que cambies el schema de entidades. Se regenera automáticamente al arrancar el API.
+**Solución:** Preservar la base y aplicar cambios incrementales. En PostgreSQL usar EF Core Migrations; si la base anterior no tiene historial, hacer primero un baseline verificado según [migraciones-produccion.md](migraciones-produccion.md). Los puentes SQLite de inventario y operación son acotados; ensayar la actualización en una copia siguiendo [despliegue-sqlite-tiendas.md](despliegue-sqlite-tiendas.md). Nunca borrar ni recrear la base para actualizar el esquema.
 
 ### 4. `QueVendecion.Web` no está en el .sln
 **Qué pasó:** Se asumió que `dotnet build` incluía el frontend. No — el frontend es un proyecto Node independiente con su propio `package.json`.
@@ -68,9 +68,9 @@ Toda la lógica del cliente (login, menú, pedidos, cuenta) está en un solo arc
 
 - [ ] `dotnet build QueVendecion.sln` pasa sin errores
 - [ ] `npm run build` en `src/QueVendecion.Web` pasa sin errores
-- [ ] No hay secrets hardcodeados (excepto la JWT key de dev en `Program.cs`)
+- [ ] No hay secretos ni credenciales literales; JWT y seed inicial se inyectan por configuración privada
 - [ ] Los endpoints nuevos están en el controller correcto (públicos vs admin vs superadmin)
-- [ ] Si se cambió el schema de entidades, la DB vieja fue eliminada
+- [ ] Si cambió el esquema, se respaldó la base existente y se probó la actualización incremental en una copia
 - [ ] Los enums se envían como strings, no números
 - [ ] El proxy de Vite apunta al puerto correcto del API
 
@@ -82,7 +82,7 @@ Toda la lógica del cliente (login, menú, pedidos, cuenta) está en un solo arc
 src/
 ├── QueVendecion.Domain/
 │   ├── Entities/          # Tienda, Producto, Pedido, Cliente, ItemPedido, UsuarioTienda
-│   └── Enums/             # RolUsuario, EstadoPedido, FormaPago, EstadoPago
+│   └── Enums/             # RolUsuario, EstadoPedido, FormaPago, EstadoPago, ModalidadPedido, EntregaProducto
 ├── QueVendecion.Application/
 │   ├── DTOs/              # PedidoDto, ProductoDto, TiendaDto, ClienteDto, etc.
 │   └── Interfaces/        # ITiendaService, IProductoService, IPedidoService, etc.
@@ -91,7 +91,7 @@ src/
 │   └── Services/          # TiendaService, ProductoService, PedidoService, etc.
 ├── QueVendecion.Api/
 │   ├── Controllers/       # TiendasController, PedidosController, PublicController, etc.
-│   ├── Program.cs         # DI, JWT, CORS, auto-migration
+│   ├── Program.cs         # DI, JWT, CORS, verificación del esquema (producción migra en deploy)
 │   └── appsettings.json   # ConnectionStrings, Jwt config
 └── QueVendecion.Web/
     ├── src/
@@ -113,15 +113,13 @@ src/
 - Falta: instalar paquete `WebPush` en el backend, generar VAPID keys, crear servicio de envío, registrar service worker en el frontend, suscribir al usuario al cargar la tienda, y enviar notificación cuando el admin cambie el estado de un pedido.
 
 ### Seed de SuperAdmin
-- Actualmente se crea SuperAdmin manualmente con curl
-- Considerar: si no existe ningún usuario SuperAdmin al arrancar, crear uno con credenciales por defecto (y forzar cambio de password)
+- Si no existe ninguno, el arranque solo crea SuperAdmin cuando recibe `SeedSuperAdmin__Email` y `SeedSuperAdmin__Password` por configuración privada. La contraseña exige al menos 12 caracteres. Si ya existe la cuenta, no se cambia.
 
 ### Testing
-- No hay tests aún
-- Prioridad baja para MVP, pero importante antes de producción
+- Hay pruebas de servicios, inventario, operación, migraciones y HTTP. Ejecutar `dotnet test` y compilar el frontend antes de publicar.
 
 ### Producción
-- Pasar de SQLite a PostgreSQL
+- PostgreSQL es la arquitectura objetivo. El proveedor efectivo del servicio informado debe diagnosticarse antes de desplegar; existe un procedimiento de ensayo para SQLite existente.
 - Dockerizar el API
 - nginx como reverse proxy
 - HTTPS obligatorio

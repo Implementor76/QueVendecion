@@ -1,6 +1,21 @@
 # Guia de Deploy - Ubuntu Server (via SSH)
 
-Paso a paso para desplegar QueVendecion en una VM con Ubuntu Server.
+Guía histórica para instalar QueVendecion en Ubuntu con PostgreSQL. Usarla solo
+si el diagnóstico confirma ese proveedor. Si el servicio conserva la SQLite
+informada, seguir [despliegue-sqlite-tiendas.md](despliegue-sqlite-tiendas.md)
+antes de preparar cualquier publicación.
+
+**Actualización del 22 de octubre de 2026:** en `srvubu01` ya se confirmó
+`Development` y SQLite activa en `/opt/apps/quevendecion/QueVendecion.db`; esta
+guía PostgreSQL no describe ese despliegue. La copia manual del frontend desde
+Windows exigió directorios `755` y archivos `644` para Nginx. Preservar la base,
+WAL y configuración del servidor al publicar; ver el procedimiento SQLite enlazado.
+
+Para una base existente, seguir obligatoriamente
+[migraciones-produccion.md](migraciones-produccion.md): backup de PostgreSQL,
+desplegar código con escrituras detenidas, migrar, verificar, arrancar y validar
+funcionamiento. Las secciones de instalación siguientes no sustituyen ese orden.
+No borrar ni recrear bases existentes.
 
 ---
 
@@ -54,6 +69,10 @@ dotnet publish src\QueVendecion.Api\QueVendecion.Api.csproj -c Release -r linux-
 
 ## 3. Subir los archivos al servidor
 
+Completar antes el backup verificado de PostgreSQL y detener la API. Subir
+también `deploy/postgresql/*.sql` del mismo release. Mantener el servicio detenido
+hasta aplicar y verificar las migraciones.
+
 ```powershell
 # Sube la API publicada
 scp -r publish\api\* usuario@192.168.1.50:/opt/apps/quevendecion/
@@ -91,13 +110,21 @@ Environment=ASPNETCORE_URLS=http://0.0.0.0:5010
 
 # Secrets — CAMBIAR estos valores
 Environment=Jwt__Key=TU_SECRET_MINIMO_32_CARACTERES_AQUI
-Environment=ConnectionStrings__DefaultConnection=Host=192.168.1.4;Port=5432;Database=quevendecion;Username=api_user;Password=C@r0l1na10
+Environment=ConnectionStrings__DefaultConnection=Host=SERVIDOR;Port=5432;Database=quevendecion;Username=USUARIO;Password=VALOR_PRIVADO
+
+# Solo en una instalación sin SuperAdmin: proporcionar por configuración privada
+# SeedSuperAdmin__Email y SeedSuperAdmin__Password (mínimo 12 caracteres).
+# Una cuenta existente no se cambia ni se vuelve a sembrar.
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 ### 4.2 Activar y arrancar el servicio
+
+**Prerrequisito:** completar la sección de base de datos y el flujo de
+[migraciones-produccion.md](migraciones-produccion.md), incluido el baseline
+verificado cuando no existe historial y la migración incremental de inventario.
 
 ```bash
 # Recarga systemd
@@ -214,12 +241,16 @@ Conectate al servidor donde esta PostgreSQL:
 # Entra a PostgreSQL
 sudo -u postgres psql
 
-# Crea solo la base de datos (el usuario api_user ya existe)
+# SOLO instalación nueva sin base previa (api_user ya existe):
 CREATE DATABASE quevendecion OWNER api_user;
 \q
 ```
 
-> **Nota:** Las tablas se crean automaticamente al iniciar la API (`EnsureCreated()`).
+En una base realmente vacía, aplicar el SQL inicial y luego las incrementales.
+En una base existente, conservarla y adoptar el historial mediante el baseline
+verificado; no ejecutar el SQL inicial sobre sus tablas. La API de producción
+no usa `EnsureCreated` ni migra automáticamente. Ver
+[migraciones-produccion.md](migraciones-produccion.md).
 
 ---
 
@@ -245,7 +276,7 @@ sudo ufw enable
 # Ver logs en tiempo real
 sudo journalctl -u quevendecion -f
 
-# Reiniciar la API despues de un cambio
+# Reiniciar solo después de backup, migración y verificación
 sudo systemctl restart quevendecion
 
 # Ver estado del servicio
@@ -281,6 +312,9 @@ sudo nginx -t && sudo systemctl reload nginx
 - [ ] `Jwt__Key` configurado con un secreto real
 - [ ] `ConnectionStrings__DefaultConnection` con credenciales reales
 - [ ] PostgreSQL accesible desde la VM
+- [ ] Backup comprobado y ensayo de restauración en una base aislada
+- [ ] Baseline revisado si la base anterior no tenía historial de EF
+- [ ] Migraciones incrementales aplicadas y datos anteriores conservados
 - [ ] Firewall configurado (puertos 80, 443, 22)
 - [ ] nginx apuntando a `http://127.0.0.1:5010` para `/api/`
 - [ ] CORS en `Program.cs` incluye la IP/dominio del frontend

@@ -4,6 +4,13 @@
 **Alcance:** API (.NET), Frontend (Vite/Vanilla JS), Dominio, Infraestructura
 **Total de hallazgos:** 27
 
+**Nota de vigencia (21 de octubre de 2026):** este documento conserva los
+hallazgos de julio como registro histórico; sus referencias a código, rutas y
+proveedor no son una evaluación actual. Para la revisión de tiendas, estados,
+inventario y despliegue, véase [tiendas-hallazgos.md](tiendas-hallazgos.md) y
+[despliegue-sqlite-tiendas.md](despliegue-sqlite-tiendas.md). Los hallazgos de
+seguridad no se consideran cerrados por esta revisión funcional.
+
 ---
 
 ## Tabla de contenidos

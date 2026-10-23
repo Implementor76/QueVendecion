@@ -2,6 +2,20 @@
 
 Paso a paso para publicar la API (self-contained) y el frontend al servidor.
 
+**Estado de `srvubu01` (22 de octubre de 2026):** usa `Development` y SQLite
+activa en `/opt/apps/quevendecion/QueVendecion.db`. Los comandos PostgreSQL de
+esta guía son históricos y no aplican a ese servicio. Seguir
+[despliegue-sqlite-tiendas.md](../docs/despliegue-sqlite-tiendas.md) para
+instantánea consistente, WAL, preservación de la base y `appsettings*` del
+servidor. No usar `scp publish\api\*` sobre el directorio activo: puede
+sobrescribir su configuración. Tras copiar el frontend, comprobar directorios
+`755` y archivos `644` para Nginx.
+
+**Antes de copiar código:** detener escrituras, respaldar PostgreSQL y comprobar
+restauración. Seguir [migraciones-produccion.md](../docs/migraciones-produccion.md).
+El orden es backup → código → migraciones → verificación → arranque → validación
+funcional. Nunca borrar ni recrear una base existente.
+
 ---
 
 ## 1. Publicar la API (desde tu PC local)
@@ -61,7 +75,7 @@ Cambia estas lineas:
 
 ```ini
 Environment=Jwt__Key=GENERAR_UN_SECRETO_LARGO_AQUI
-Environment=ConnectionStrings__DefaultConnection=Host=IP_BD;Port=5432;Database=quevendecion;Username=api_user;Password=C@r0l1na10
+Environment=ConnectionStrings__DefaultConnection=Host=IP_BD;Port=5432;Database=quevendecion;Username=USUARIO;Password=VALOR_PRIVADO
 ```
 
 Para generar un secreto JWT rapido:
@@ -73,6 +87,17 @@ openssl rand -base64 48
 ---
 
 ## 5. Activar y arrancar la API
+
+Antes del arranque, aplicar el baseline una sola vez si la base antigua no tiene
+historial y su esquema fue verificado. Aplicar luego el SQL incremental del mismo
+release y verificarlo, según la guía de migraciones. Mantener la API detenida
+hasta que todos los pasos terminen correctamente:
+
+```bash
+set -e
+psql 'service=quevendecion' -X -v ON_ERROR_STOP=1 -f inventario.sql
+psql 'service=quevendecion' -X -v ON_ERROR_STOP=1 -f verificar-inventario.sql
+```
 
 ```bash
 sudo systemctl daemon-reload
@@ -88,10 +113,11 @@ sudo systemctl status quevendecion
 ## 6. Verificar que responde
 
 ```bash
-curl http://localhost:5010/api/public/tienda/test
+curl --fail http://localhost:5010/api/public/tienda/SLUG_EXISTENTE/menu
 ```
 
-Si ves un JSON (aunque sea vacio o error 404), la API esta viva.
+Usar una tienda existente y exigir HTTP 200; un 404 no verifica que los datos
+se preservaron. Comprobar también login y pedidos anteriores.
 
 ---
 
@@ -128,13 +154,7 @@ sudo journalctl -u quevendecion --no-pager -n 50
 
 ---
 
-## Comando rapido (publicar todo de un solo golpe)
+## Publicaciones posteriores
 
-```powershell
-# Desde la raiz del repo
-dotnet publish src\QueVendecion.Api\QueVendecion.Api.csproj -c Release -r linux-x64 --self-contained true -o publish\api
-scp -r publish\api\* implementor@IP:/opt/apps/quevendecion/
-cd src\QueVendecion.Web; npm run build; cd ..\..
-scp -r src\QueVendecion.Web\dist\* implementor@IP:/var/www/quevendecion/
-ssh implementor@IP "chmod +x /opt/apps/quevendecion/QueVendecion.Api && sudo systemctl restart quevendecion"
-```
+Repetir el flujo de [migraciones-produccion.md](../docs/migraciones-produccion.md).
+No usar un comando de copia/reinicio que omita backup, migración y verificación.

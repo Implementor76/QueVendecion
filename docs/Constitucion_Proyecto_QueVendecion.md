@@ -27,6 +27,13 @@ Producción: - PostgreSQL
 
 El dominio nunca dependerá de un motor específico de base de datos.
 
+**Nota de revisión (21 de octubre de 2026):** PostgreSQL sigue siendo la meta
+arquitectónica indicada aquí. La instancia informada conserva un archivo SQLite;
+su entorno y proveedor efectivos aún no se han comprobado. La selección actual
+del código depende del entorno y no se modificó en esta revisión. Véase
+[despliegue-sqlite-tiendas.md](despliegue-sqlite-tiendas.md) para diagnosticar y
+ensayar en copia antes de decidir la publicación.
+
 ### Infraestructura
 
 -   Ubuntu Server

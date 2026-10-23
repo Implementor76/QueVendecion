@@ -2,6 +2,20 @@
 
 Guia rapida para deploy segun lo que cambió.
 
+**`srvubu01` actual (22 de octubre de 2026):** `Development` con SQLite activa.
+Los ejemplos `psql` siguientes solo aplican a un destino PostgreSQL confirmado;
+no ejecutarlos en `srvubu01`. El procedimiento vigente está en
+[despliegue-sqlite-tiendas.md](../docs/despliegue-sqlite-tiendas.md). Preservar
+base, WAL y `appsettings*` al copiar API; verificar permisos `755` de directorios
+y `644` de archivos del frontend para Nginx. Los `scp` de este documento que
+copian todo `publish\api` no preservan por sí solos esa configuración.
+
+Para cualquier cambio de backend, seguir primero
+[migraciones-produccion.md](../docs/migraciones-produccion.md): backup verificado
+de PostgreSQL, detener escrituras, desplegar, aplicar migraciones incrementales,
+verificar esquema/datos, arrancar y comprobar funcionamiento. No copiar binarios
+sobre un servicio activo ni reiniciarlo antes de migrar.
+
 ---
 
 ## Cambió solo la API (backend)
@@ -14,8 +28,13 @@ scp -r publish\api\* implementor@192.168.1.3:/opt/apps/quevendecion/
 En el servidor:
 
 ```bash
+set -e
 chmod +x /opt/apps/quevendecion/QueVendecion.Api
-sudo systemctl restart quevendecion
+# Con backup y código desplegado, aplicar y verificar el SQL del release:
+psql 'service=quevendecion' -X -v ON_ERROR_STOP=1 -f inventario.sql
+psql 'service=quevendecion' -X -v ON_ERROR_STOP=1 -f verificar-inventario.sql
+# Solo si los pasos anteriores terminaron correctamente:
+sudo systemctl start quevendecion
 ```
 
 ---
@@ -47,23 +66,26 @@ scp -r src\QueVendecion.Web\dist\* implementor@192.168.1.3:/var/www/quevendecion
 En el servidor:
 
 ```bash
+set -e
 chmod +x /opt/apps/quevendecion/QueVendecion.Api
-sudo systemctl restart quevendecion
+psql 'service=quevendecion' -X -v ON_ERROR_STOP=1 -f inventario.sql
+psql 'service=quevendecion' -X -v ON_ERROR_STOP=1 -f verificar-inventario.sql
+# Solo después de verificar la migración:
+sudo systemctl start quevendecion
 ```
 
 ---
 
 ## Cambió el enum de estados o estructura de la BD
 
-Si cambiaste un enum, una entidad o agregaste una migración, borrá la BD y dejá que se recree:
+Generar una migración incremental con EF Core, revisar su SQL y probarla sobre
+una copia restaurada. No renumerar valores de enums persistidos. Nunca borrar
+ni recrear la base para actualizarla, tampoco cuando desarrollo contiene datos.
 
-```bash
-ssh implementor@192.168.1.3
-sudo rm /opt/apps/quevendecion/QueVendecion.db
-sudo systemctl restart quevendecion
-```
-
-> **Cuidado:** Esto borra todos los datos (tiendas, pedidos, usuarios). Solo hacer en desarrollo/pruebas.
+La base PostgreSQL anterior sin historial necesita primero el baseline verificado
+de [migraciones-produccion.md](../docs/migraciones-produccion.md). No ejecutar
+la migración inicial sobre tablas existentes. El puente de SQLite queda reservado
+al inventario antiguo en desarrollo.
 
 ---
 
@@ -75,8 +97,8 @@ ssh implementor@192.168.1.3
 # Verificar que la API esta corriendo
 sudo systemctl status quevendecion
 
-# Probar un endpoint
-curl -k https://pedidos.implementor.site/api/public/tienda/test
+# Reemplazar SLUG_EXISTENTE por una tienda real: debe devolver HTTP 200
+curl --fail https://pedidos.implementor.site/api/public/tienda/SLUG_EXISTENTE/menu
 ```
 
 ---

@@ -1,19 +1,22 @@
-param(
-    [string]$ProjectPath = "C:\Users\Marco\source\repos\MiApi",   # Ruta de tu proyecto
-    [string]$PublishFolder = "bin\Release\net8.0\linux-x64\publish", # Ajusta según tu versión .NET
-    [string]$VmUser = "usuario",       # Usuario de tu VM
-    [string]$VmHost = "192.168.1.50",  # IP o dominio de tu VM
-    [string]$VmPath = "/var/www/miapi",# Carpeta destino en la VM
-    [string]$ServiceName = "miapi"     # Nombre del servicio systemd
-)
+# Publicacion y CI/CD
 
-Write-Host "🚀 Publicando API..."
-dotnet publish $ProjectPath -c Release -r linux-x64 /p:PublishTrimmed=true
+El ejemplo anterior de copiar binarios y reiniciar directamente ya no es valido
+para un backend con datos persistentes. En `srvubu01` (22 de octubre de 2026)
+el servicio usa SQLite en `Development`; seguir
+[despliegue-sqlite-tiendas.md](../../docs/despliegue-sqlite-tiendas.md) para
+preservar base, WAL y configuración. Los pasos PostgreSQL siguientes son la
+ruta histórica para un destino PostgreSQL confirmado.
 
-Write-Host "📂 Copiando archivos a la VM..."
-scp -r "$ProjectPath\$PublishFolder\*" "$VmUser@$VmHost:$VmPath/"
+Seguir [migraciones-produccion.md](../../docs/migraciones-produccion.md):
 
-Write-Host "🔧 Ajustando permisos y reiniciando servicio..."
-ssh "$VmUser@$VmHost" "sudo chown -R www-data:www-data $VmPath && sudo chmod -R 755 $VmPath && sudo systemctl restart $ServiceName && sudo systemctl reload nginx"
+1. Backup de PostgreSQL y ensayo de restauracion.
+2. Detener escrituras y desplegar el codigo del release.
+3. Aplicar migraciones incrementales revisadas (baseline verificado una sola vez).
+4. Verificar esquema, historial y preservacion de datos.
+5. Arrancar/reiniciar el servicio.
+6. Verificar integridad, login, menu y pedidos existentes.
 
-Write-Host "✅ Deploy completado"
+El pipeline debe detenerse ante cualquier error. No borrar ni recrear la base,
+no ejecutar migraciones al arrancar la API y no publicar una SQLite de desarrollo
+en produccion. Para frontend sin cambios de backend, ejecutar npm run build y
+publicar dist; esto no actualiza el esquema de la base.
