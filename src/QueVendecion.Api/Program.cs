@@ -101,6 +101,7 @@ using (var scope = app.Services.CreateScope())
         await OperacionSchemaUpgrade.AplicarAsync(db);
         await CostosSchemaUpgrade.AplicarAsync(db);
         await MostradorSchemaUpgrade.AplicarAsync(db);
+        await PapelSchemaUpgrade.AplicarAsync(db);
         return;
     }
     if (args.Contains("--upgrade-costos"))
@@ -120,6 +121,7 @@ using (var scope = app.Services.CreateScope())
         await OperacionSchemaUpgrade.AplicarAsync(db);
         await CostosSchemaUpgrade.AplicarAsync(db);
         await MostradorSchemaUpgrade.AplicarAsync(db);
+        await PapelSchemaUpgrade.AplicarAsync(db);
     }
     else
     {
@@ -129,6 +131,7 @@ using (var scope = app.Services.CreateScope())
         await OperacionSchemaUpgrade.VerificarAsync(db);
         await CostosSchemaUpgrade.VerificarAsync(db);
         await MostradorSchemaUpgrade.VerificarAsync(db);
+        await PapelSchemaUpgrade.VerificarAsync(db);
     }
 
     if (!db.UsuariosTienda.Any(u => u.Rol == RolUsuario.SuperAdmin))

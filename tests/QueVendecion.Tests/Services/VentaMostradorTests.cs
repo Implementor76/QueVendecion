@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using QueVendecion.Application.DTOs;
 using QueVendecion.Application.Exceptions;
 using QueVendecion.Domain.Entities;
@@ -10,6 +13,27 @@ namespace QueVendecion.Tests.Services;
 
 public class VentaMostradorTests
 {
+    [Fact]
+    public async Task ReintentoDeVentaAnteriorConservaHuellaPrevia()
+    {
+        await using var db = TestDbContextFactory.Create();
+        var tienda = new Tienda { Nombre = "Prueba", Slug = "prueba" };
+        db.Tiendas.Add(tienda); await db.SaveChangesAsync();
+        var producto = new Producto { TiendaId = tienda.Id, Nombre = "Copias", Precio = 3m };
+        db.Productos.Add(producto); await db.SaveChangesAsync();
+        var dto = new RegistrarVentaMostradorDto { ClaveIdempotencia = Guid.NewGuid(), ProductoId = producto.Id,
+            Cantidad = 2, PrecioEsperado = 3m, FormaPago = FormaPago.Efectivo };
+        var huellaAnterior = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { dto.ProductoId, dto.Cantidad, dto.PrecioEsperado, dto.FormaPago, Nota = (string?)null }))));
+        var previo = new Pedido { TiendaId = tienda.Id, Origen = OrigenPedido.Mostrador,
+            ClaveIdempotencia = dto.ClaveIdempotencia.ToString("D"), HuellaSolicitud = huellaAnterior,
+            Estado = EstadoPedido.Entregado, EstadoPago = EstadoPago.Pagado, Total = 6m };
+        db.Pedidos.Add(previo); await db.SaveChangesAsync();
+        var resultado = await new PedidoService(db).RegistrarMostradorAsync(tienda.Id, 1, dto);
+        Assert.Equal(previo.Id, resultado.Id);
+        Assert.Equal(1, await db.Pedidos.CountAsync());
+        Assert.Empty(await db.MovimientosInventario.ToListAsync());
+    }
     [Fact]
     public async Task VentaEntregadaPagadaMantieneCostosHistoricosYNoDuplicaCobro()
     {
@@ -56,7 +80,7 @@ public class VentaMostradorTests
     }
 
     [Fact]
-    public async Task RechazaContenidoDistintoYProductosAjenosNoDisponiblesOConInventario()
+    public async Task RechazaContenidoDistintoYProductosAjenosONoDisponibles()
     {
         await using var db = TestDbContextFactory.Create();
         var a = new Tienda { Nombre = "A", Slug = "a" };
@@ -76,16 +100,20 @@ public class VentaMostradorTests
         await service.RegistrarMostradorAsync(a.Id, 1, dto);
         dto.Cantidad = 2;
         Assert.Equal("idempotencia_conflicto", (await Assert.ThrowsAsync<ReglaNegocioException>(() => service.RegistrarMostradorAsync(a.Id, 1, dto))).Codigo);
-        foreach (var id in new[] { ajeno.Id, inactivo.Id, inventario.Id })
+        foreach (var id in new[] { ajeno.Id, inactivo.Id })
             await Assert.ThrowsAsync<ReglaNegocioException>(() => service.RegistrarMostradorAsync(a.Id, 1,
                 new RegistrarVentaMostradorDto { ClaveIdempotencia = Guid.NewGuid(), ProductoId = id, Cantidad = 1, PrecioEsperado = 3m }));
         await Assert.ThrowsAsync<ReglaNegocioException>(() => service.RegistrarMostradorAsync(a.Id, 1,
             new RegistrarVentaMostradorDto { ClaveIdempotencia = Guid.NewGuid(), ProductoId = producto.Id, Cantidad = 0, PrecioEsperado = 3m }));
+        var ventaInventario = await service.RegistrarMostradorAsync(a.Id, 1,
+            new RegistrarVentaMostradorDto { ClaveIdempotencia = Guid.NewGuid(), ProductoId = inventario.Id, Cantidad = 1, PrecioEsperado = 3m });
+        Assert.Equal(9, (await db.Productos.FindAsync(inventario.Id))!.Stock);
+        Assert.Equal(1, await db.MovimientosInventario.CountAsync(m => m.PedidoId == ventaInventario.Id));
         Assert.Equal("precio_invalido", (await Assert.ThrowsAsync<ReglaNegocioException>(() => service.RegistrarMostradorAsync(a.Id, 1,
             new RegistrarVentaMostradorDto { ClaveIdempotencia = Guid.NewGuid(), ProductoId = negativo.Id, Cantidad = 1, PrecioEsperado = -3m }))).Codigo);
         Assert.Equal("importe_invalido", (await Assert.ThrowsAsync<ReglaNegocioException>(() => service.RegistrarMostradorAsync(a.Id, 1,
             new RegistrarVentaMostradorDto { ClaveIdempotencia = Guid.NewGuid(), ProductoId = enorme.Id, Cantidad = 1000, PrecioEsperado = enorme.Precio }))).Codigo);
-        Assert.Equal(1, await db.Pedidos.CountAsync());
+        Assert.Equal(2, await db.Pedidos.CountAsync());
     }
 
     [Theory]

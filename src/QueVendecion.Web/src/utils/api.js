@@ -28,6 +28,7 @@ async function request(url, options = {}) {
       'producto_fecha_incompatible', 'producto_modalidad_incompatible', 'producto_entrega_incompatible', 'entrega_producto_invalida', 'transicion_invalida', 'horario_invalido', 'fechas_invalidas'];
     safeCodes.push('direccion_entrega_invalida');
     safeCodes.push('clave_invalida', 'pago_invalido', 'nota_invalida', 'inventario_no_permitido', 'idempotencia_conflicto', 'registro_ocupado', 'acceso_denegado', 'precio_actualizado', 'precio_invalido', 'importe_invalido');
+    safeCodes.push('papel_invalido', 'papel_cantidad_invalida', 'papel_configuracion_cambio', 'doble_cara_no_disponible', 'insumo_referenciado', 'inventario_inactivo');
     const message = response.status < 500 && safeCodes.includes(payload?.code)
       ? payload.message : 'No se pudo completar la operación. Revisa los datos e intenta de nuevo.';
     const error = new Error(message);

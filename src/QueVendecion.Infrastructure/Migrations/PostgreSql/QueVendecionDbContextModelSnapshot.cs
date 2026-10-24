@@ -61,8 +61,23 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.Property<int>("Cantidad")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("CarasPorJuego")
+                        .HasColumnType("integer");
+
                     b.Property<decimal?>("CostoUnitarioHistorico")
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<bool?>("DobleCara")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("HojasConsumidas")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Juegos")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PapelInsumoIdHistorico")
+                        .HasColumnType("integer");
 
                     b.Property<int>("PedidoId")
                         .HasColumnType("integer");
@@ -236,6 +251,11 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AdmiteDobleCara")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<decimal?>("CostoUnitario")
                         .HasColumnType("decimal(18,4)");
 
@@ -267,6 +287,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("PapelInsumoId")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Precio")
                         .HasColumnType("decimal(18,2)");
 
@@ -282,6 +305,8 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                         .HasDefaultValue(false);
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PapelInsumoId");
 
                     b.HasIndex("TiendaId");
 
@@ -427,11 +452,18 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
 
             modelBuilder.Entity("QueVendecion.Domain.Entities.Producto", b =>
                 {
+                    b.HasOne("QueVendecion.Domain.Entities.Producto", "PapelInsumo")
+                        .WithMany()
+                        .HasForeignKey("PapelInsumoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("QueVendecion.Domain.Entities.Tienda", "Tienda")
                         .WithMany("Productos")
                         .HasForeignKey("TiendaId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("PapelInsumo");
 
                     b.Navigation("Tienda");
                 });

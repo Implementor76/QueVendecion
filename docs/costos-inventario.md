@@ -1,5 +1,7 @@
 # Costos e inventario por tienda (23 de octubre de 2026)
 
+La ampliación posterior que permite vender inventario en mostrador y reservar hojas para servicios de copias se documenta en [papel-mostrador.md](papel-mostrador.md). El costo completo estimado del servicio por cara permanece como costo histórico de su partida; la salida de papel no se suma otra vez al resumen.
+
 La etapa posterior de ventas presenciales se documenta en [venta-mostrador.md](venta-mostrador.md). Reutiliza el costo histórico y el resumen de esta etapa sin descontar consumibles.
 
 Esta etapa sirve a cualquier tienda. No crea Pinyex ni carga productos reales.

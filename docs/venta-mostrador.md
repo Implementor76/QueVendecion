@@ -1,5 +1,7 @@
 # Venta de mostrador: primera versión (24 de octubre de 2026)
 
+> Este documento conserva las decisiones y pruebas de la primera versión. La ampliación para productos con inventario y consumo de papel está en [papel-mostrador.md](papel-mostrador.md). Desde esa ampliación, la restricción a productos sin inventario y la ausencia de consumo automático de hojas descritas abajo ya no aplican a servicios vinculados con papel.
+
 ## Uso en Pinyex y en cualquier tienda
 
 1. Ingresa como **Admin** de la tienda. En **Menú**, agrega «Copia blanco y negro, tamaño carta» con el precio de venta por cara y el costo unitario estimado. Este costo puede sumar papel, tóner, electricidad y reserva de mantenimiento. Deja el costo vacío si aún no se conoce; cero significa costo cero conocido. Marca el servicio como disponible y deja **Controlar inventario** desactivado. La forma de entrega exigida por el catálogo puede seleccionarse como «Ambas al mismo precio»; la venta presencial no pide ni usa modalidad o ventana de entrega. No se crea ningún producto automáticamente.

@@ -18,6 +18,9 @@ public class ProductoConfiguration : IEntityTypeConfiguration<Producto>
         builder.Property(p => p.Stock).HasDefaultValue(null);
         builder.Property(p => p.FechasServicioJson).HasColumnType("text");
         builder.Property(p => p.EntregaPermitida).IsRequired(false);
+        builder.Property(p => p.AdmiteDobleCara).HasDefaultValue(false);
+        builder.HasOne(p => p.PapelInsumo).WithMany().HasForeignKey(p => p.PapelInsumoId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(p => p.Tienda)
             .WithMany(t => t.Productos)
             .HasForeignKey(p => p.TiendaId);

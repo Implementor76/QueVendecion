@@ -144,7 +144,7 @@ async function loadPedidos(container, estado, fechaServicio = '') {
           ${p.direccionEntrega ? `<p class="text-sm text-text-secondary w-full">Dirección: ${escapeHtml(p.direccionEntrega)}</p>` : ''}
           ${p.horarioConfirmado ? `<p class="text-sm text-primary w-full">Confirmado o estimado: ${escapeHtml(p.horarioConfirmado)}</p>` : ''}
           ${p.items.map(i => `
-            <span class="chip text-[0.75rem] py-1 px-2.5" style="cursor:default">${i.productoNombre} ×${i.cantidad}</span>
+            <span class="chip text-[0.75rem] py-1 px-2.5" style="cursor:default">${i.productoNombre} ×${i.cantidad}${i.carasPorJuego ? ` · ${i.carasPorJuego} caras/juego × ${i.juegos} juegos · ${i.dobleCara ? 'Ambos lados' : 'Un lado'} · ${i.hojasConsumidas} hojas consumidas` : ''}</span>
           `).join('')}
         </div>
         <div class="flex justify-between items-center mb-3">

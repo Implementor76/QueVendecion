@@ -17,6 +17,7 @@ public class MigracionesPostgreSqlTests
     private const string EntregaEstados = "20261022060414_AsignarEntregaYRegistrarEstados";
     private const string Costos = "20261023064705_AgregarCostosYResumen";
     private const string Mostrador = "20261024162911_AgregarVentaMostrador";
+    private const string Papel = "20261024194902_AgregarPapelEnServicios";
 
     private static QueVendecionDbContext Create() => new(new DbContextOptionsBuilder<QueVendecionDbContext>()
         .UseNpgsql("Host=localhost;Database=design_only;Username=design_only").Options);
@@ -47,7 +48,7 @@ public class MigracionesPostgreSqlTests
     {
         using var db = Create();
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(new[] { Baseline, Inventario, Operacion, Direccion, EntregaEstados, Costos, Mostrador }, db.Database.GetMigrations());
+        Assert.Equal(new[] { Baseline, Inventario, Operacion, Direccion, EntregaEstados, Costos, Mostrador, Papel }, db.Database.GetMigrations());
     }
 
     [Fact]
@@ -123,5 +124,7 @@ public class MigracionesPostgreSqlTests
         Assert.Throws<NotSupportedException>(() => new AgregarCostosYResumen { ActiveProvider = Provider }.DownOperations);
         Assert.Throws<NotSupportedException>(() => new AgregarVentaMostrador { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
         Assert.Throws<NotSupportedException>(() => new AgregarVentaMostrador { ActiveProvider = Provider }.DownOperations);
+        Assert.Throws<NotSupportedException>(() => new AgregarPapelEnServicios { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
+        Assert.Throws<NotSupportedException>(() => new AgregarPapelEnServicios { ActiveProvider = Provider }.DownOperations);
     }
 }

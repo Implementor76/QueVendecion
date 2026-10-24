@@ -1,6 +1,7 @@
 import { api } from '../utils/api.js';
 import { getAuth, clearAuth } from '../utils/auth.js';
 import { navigate } from '../utils/router.js';
+const escapar = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function renderAdminNav(active) {
   const items = [
@@ -68,6 +69,8 @@ export function renderMenu(container, params) {
                 <input type="checkbox" id="prod-tiene-inventario" class="toggle-input" />
               </label>
               <div id="prod-stock-wrap" class="hidden"><input type="number" id="prod-stock" placeholder="Stock" step="1" min="0" class="input-field" /></div>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="prod-consume-papel"> Este servicio consume papel</label>
+              <div id="prod-papel-wrap" class="hidden space-y-2 text-sm"><label>Papel del mismo inventario<select id="prod-papel" class="input-field w-full"><option value="">Selecciona papel</option></select></label><label class="flex items-center gap-2"><input type="checkbox" id="prod-doble"> Admite ambos lados</label><p>Precio y costo estimado por cara; el costo ya incluye papel. El stock del insumo se mide en hojas.</p></div>
               <label class="block text-sm">Existencia mínima (opcional)<input type="number" id="prod-minimo" step="1" min="0" class="input-field"></label>
               <div id="prod-msg" class="text-sm hidden text-center"></div>
               <div class="flex gap-2">
@@ -109,10 +112,12 @@ export function renderMenu(container, params) {
     formSection.classList.add('hidden');
     container.querySelector('#form-producto').reset();
     syncInventory();
+    syncPapel();
     container.querySelector('#prod-msg').classList.add('hidden');
   });
 
   const syncInventory = bindInventory(container, 'prod');
+  const syncPapel = bindPaper(container, 'prod');
 
   container.querySelector('#form-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -130,12 +135,15 @@ export function renderMenu(container, params) {
         tieneInventario: container.querySelector('#prod-tiene-inventario').checked,
         stock: container.querySelector('#prod-tiene-inventario').checked
           ? container.querySelector('#prod-stock').valueAsNumber
-          : null
+          : null,
+        papelInsumoId: container.querySelector('#prod-consume-papel').checked ? Number(container.querySelector('#prod-papel').value) : null,
+        admiteDobleCara: container.querySelector('#prod-consume-papel').checked && container.querySelector('#prod-doble').checked
       });
       msg.textContent = '¡Producto agregado! Agrega otro o cierra.';
       msg.className = 'text-sm text-success';
       container.querySelector('#form-producto').reset();
       syncInventory();
+      syncPapel();
       container.querySelector('#prod-nombre').value = '';
       container.querySelector('#prod-descripcion').value = '';
       container.querySelector('#prod-precio').value = '';
@@ -153,6 +161,8 @@ export function renderMenu(container, params) {
 async function loadProductos(container) {
   try {
     const productos = await api.productos.getByMiTienda();
+    const crearPapel = container.closest('.min-h-screen')?.querySelector('#prod-papel');
+    if (crearPapel) crearPapel.innerHTML = `<option value="">Selecciona papel</option>${productos.filter(p => p.tieneInventario).map(p => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join('')}`;
 
     if (productos.length === 0) {
       container.innerHTML = `
@@ -225,6 +235,8 @@ async function loadProductos(container) {
             <div id="edit-stock-wrap" class="hidden">
               <input type="number" id="edit-stock" placeholder="Stock" step="1" min="0" class="input-field" />
             </div>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="edit-consume-papel"> Este servicio consume papel</label>
+            <div id="edit-papel-wrap" class="hidden space-y-2 text-sm"><label>Papel del mismo inventario<select id="edit-papel" class="input-field w-full"><option value="">Selecciona papel</option>${productos.filter(p => p.tieneInventario).map(p => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join('')}</select></label><label class="flex items-center gap-2"><input type="checkbox" id="edit-doble"> Admite ambos lados</label><p>Precio y costo estimado por cara; el costo ya incluye papel. El stock del insumo se mide en hojas.</p></div>
             <label class="block text-sm">Existencia mínima (opcional)<input type="number" id="edit-minimo" step="1" min="0" class="input-field"></label>
             <button type="submit" class="btn-accent w-full">
               <i data-lucide="check" class="w-4 h-4"></i> Guardar
@@ -237,6 +249,7 @@ async function loadProductos(container) {
     if (window.lucide) lucide.createIcons();
 
     const syncEditInventory = bindInventory(container, 'edit');
+    const syncEditPapel = bindPaper(container, 'edit');
 
     container.querySelectorAll('.btn-edit').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -248,6 +261,10 @@ async function loadProductos(container) {
         container.querySelector('#edit-costo').value = producto.costoUnitario ?? '';
         container.querySelector('#edit-minimo').value = producto.existenciaMinima ?? '';
         syncEditInventory();
+        container.querySelector('#edit-consume-papel').checked = producto.consumePapel;
+        container.querySelector('#edit-papel').value = producto.papelInsumoId ?? '';
+        container.querySelector('#edit-doble').checked = producto.admiteDobleCara;
+        syncEditPapel();
         container.querySelector('#edit-id').value = btn.dataset.id;
         container.querySelector('#edit-nombre').value = btn.dataset.nombre;
         container.querySelector('#edit-descripcion').value = btn.dataset.descripcion;
@@ -265,6 +282,7 @@ async function loadProductos(container) {
     container.querySelector('#form-editar').addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = container.querySelector('#edit-id').value;
+      const productoActual = productos.find(p => p.id === Number(id));
       try {
         await api.productos.update(id, {
           nombre: container.querySelector('#edit-nombre').value,
@@ -272,13 +290,15 @@ async function loadProductos(container) {
           precio: parseFloat(container.querySelector('#edit-precio').value),
           costoUnitario: container.querySelector('#edit-costo').value === '' ? null : Number(container.querySelector('#edit-costo').value),
           existenciaMinima: container.querySelector('#edit-tiene-inventario').checked && container.querySelector('#edit-minimo').value !== '' ? Number(container.querySelector('#edit-minimo').value) : null,
-          disponible: true,
+          disponible: productoActual.disponible,
           entregaPermitida: container.querySelector('#edit-entrega').value,
           fechasServicio: leerFechas(container.querySelector('#edit-fechas').value),
           tieneInventario: container.querySelector('#edit-tiene-inventario').checked,
           stock: container.querySelector('#edit-tiene-inventario').checked
             ? container.querySelector('#edit-stock').valueAsNumber
-            : null
+            : null,
+          papelInsumoId: container.querySelector('#edit-consume-papel').checked ? Number(container.querySelector('#edit-papel').value) : null,
+          admiteDobleCara: container.querySelector('#edit-consume-papel').checked && container.querySelector('#edit-doble').checked
         });
         container.querySelector('#modal-editar').classList.add('hidden');
         loadProductos(container);
@@ -318,6 +338,25 @@ function bindInventory(container, prefix) {
     if (!toggle.checked) stock.value = '';
   };
   toggle.addEventListener('change', sync);
+  sync();
+  return sync;
+}
+
+function bindPaper(container, prefix) {
+  const toggle = container.querySelector(`#${prefix}-consume-papel`);
+  const inventario = container.querySelector(`#${prefix}-tiene-inventario`);
+  const wrap = container.querySelector(`#${prefix}-papel-wrap`);
+  const select = container.querySelector(`#${prefix}-papel`);
+  const doble = container.querySelector(`#${prefix}-doble`);
+  const sync = () => {
+    toggle.disabled = inventario.checked;
+    if (inventario.checked) toggle.checked = false;
+    wrap.classList.toggle('hidden', !toggle.checked);
+    select.required = toggle.checked;
+    if (!toggle.checked) { select.value = ''; doble.checked = false; }
+  };
+  toggle.addEventListener('change', sync);
+  inventario.addEventListener('change', sync);
   sync();
   return sync;
 }

@@ -50,6 +50,7 @@ public class ProductoService : IProductoService
         ValidarEntrega(dto);
         await ValidarUsuarioAsync(tiendaId, usuarioId);
         await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await ValidarPapelAsync(tiendaId, null, dto);
         var producto = new Producto
         {
             TiendaId = tiendaId,
@@ -62,6 +63,8 @@ public class ProductoService : IProductoService
             Stock = dto.TieneInventario ? dto.Stock : null,
             CostoUnitario = dto.CostoUnitario,
             ExistenciaMinima = dto.TieneInventario ? dto.ExistenciaMinima : null,
+            PapelInsumoId = dto.PapelInsumoId,
+            AdmiteDobleCara = dto.AdmiteDobleCara,
             FechasServicioJson = dto.FechasServicio.Count == 0 ? null : JsonSerializer.Serialize(dto.FechasServicio.Distinct().Order()),
             EntregaPermitida = dto.EntregaPermitida
         };
@@ -92,6 +95,7 @@ public class ProductoService : IProductoService
         await ValidarUsuarioAsync(producto.TiendaId, usuarioId);
         await using var tx = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         await _context.Entry(producto).ReloadAsync();
+        await ValidarPapelAsync(producto.TiendaId, id, dto);
         if (producto.TieneInventario && !dto.TieneInventario)
             throw new ReglaNegocioException("inventario_activo", "No se puede desactivar el inventario de un producto existente.");
         if (producto.TieneInventario && dto.Stock != producto.Stock)
@@ -107,6 +111,8 @@ public class ProductoService : IProductoService
         if (activar) producto.Stock = dto.Stock;
         producto.CostoUnitario = dto.CostoUnitario;
         producto.ExistenciaMinima = dto.TieneInventario ? dto.ExistenciaMinima : null;
+        producto.PapelInsumoId = dto.PapelInsumoId;
+        producto.AdmiteDobleCara = dto.AdmiteDobleCara;
         producto.FechasServicioJson = dto.FechasServicio.Count == 0 ? null : JsonSerializer.Serialize(dto.FechasServicio.Distinct().Order());
         producto.EntregaPermitida = dto.EntregaPermitida;
 
@@ -127,6 +133,8 @@ public class ProductoService : IProductoService
     {
         var producto = await _context.Productos.FindAsync(id);
         if (producto == null) return false;
+        if (await _context.Productos.AnyAsync(p => p.PapelInsumoId == id))
+            throw new ReglaNegocioException("insumo_referenciado", "Desvincula este papel de los servicios antes de borrarlo.");
         if (await _context.ItemsPedido.AnyAsync(i => i.ProductoId == id) || await _context.MovimientosInventario.AnyAsync(m => m.ProductoId == id))
             throw new ReglaNegocioException("producto_con_historial", "No se puede borrar un producto con pedidos o movimientos. Márcalo como no disponible.");
 
@@ -203,6 +211,21 @@ public class ProductoService : IProductoService
             throw new ReglaNegocioException("usuario_invalido", "El usuario no pertenece a esta tienda.");
     }
 
+    private async Task ValidarPapelAsync(int tiendaId, int? servicioId, CrearProductoDto dto)
+    {
+        if (dto.PapelInsumoId == null)
+        {
+            if (dto.AdmiteDobleCara)
+                throw new ReglaNegocioException("papel_invalido", "Selecciona el papel antes de habilitar ambos lados.");
+            return;
+        }
+        if (dto.TieneInventario || dto.PapelInsumoId == servicioId)
+            throw new ReglaNegocioException("papel_invalido", "El servicio debe estar sin inventario y no puede usarse como su propio insumo.");
+        var insumo = await _context.Productos.AsNoTracking().FirstOrDefaultAsync(p => p.Id == dto.PapelInsumoId && p.TiendaId == tiendaId);
+        if (insumo == null || !insumo.TieneInventario || insumo.PapelInsumoId != null)
+            throw new ReglaNegocioException("papel_invalido", "Elige un producto de esta tienda con inventario activo como papel.");
+    }
+
     private static void ValidarCostoYMinimo(CrearProductoDto dto)
     {
         if (dto.CostoUnitario < 0 || dto.CostoUnitario > 99999999999999m)
@@ -240,6 +263,8 @@ public class ProductoService : IProductoService
         ImagenUrl = p.ImagenUrl,
         TieneInventario = p.TieneInventario,
         Stock = p.Stock,
+        ConsumePapel = p.PapelInsumoId.HasValue,
+        AdmiteDobleCara = p.AdmiteDobleCara,
         FechasServicio = OperacionReglas.LeerFechas(p),
         EntregaPermitida = p.EntregaPermitida
     };
@@ -249,7 +274,8 @@ public class ProductoService : IProductoService
         Id = p.Id, TiendaId = p.TiendaId, Nombre = p.Nombre, Descripcion = p.Descripcion,
         Precio = p.Precio, Disponible = p.Disponible, ImagenUrl = p.ImagenUrl,
         TieneInventario = p.TieneInventario, Stock = p.Stock,
+        ConsumePapel = p.PapelInsumoId.HasValue, AdmiteDobleCara = p.AdmiteDobleCara,
         FechasServicio = OperacionReglas.LeerFechas(p), EntregaPermitida = p.EntregaPermitida,
-        CostoUnitario = p.CostoUnitario, ExistenciaMinima = p.ExistenciaMinima
+        CostoUnitario = p.CostoUnitario, ExistenciaMinima = p.ExistenciaMinima, PapelInsumoId = p.PapelInsumoId
     };
 }

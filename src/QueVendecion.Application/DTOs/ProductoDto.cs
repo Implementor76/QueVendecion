@@ -13,6 +13,8 @@ public class ProductoDto
     public string? ImagenUrl { get; set; }
     public bool TieneInventario { get; set; }
     public int? Stock { get; set; }
+    public bool ConsumePapel { get; set; }
+    public bool AdmiteDobleCara { get; set; }
     public List<DateOnly> FechasServicio { get; set; } = new();
     public EntregaProducto? EntregaPermitida { get; set; }
 }
@@ -28,6 +30,8 @@ public class CrearProductoDto
     public int? Stock { get; set; }
     public decimal? CostoUnitario { get; set; }
     public int? ExistenciaMinima { get; set; }
+    public int? PapelInsumoId { get; set; }
+    public bool AdmiteDobleCara { get; set; }
     public List<DateOnly> FechasServicio { get; set; } = new();
     public EntregaProducto? EntregaPermitida { get; set; } = EntregaProducto.Ambas;
 }
@@ -36,4 +40,5 @@ public class ProductoAdminDto : ProductoDto
 {
     public decimal? CostoUnitario { get; set; }
     public int? ExistenciaMinima { get; set; }
+    public int? PapelInsumoId { get; set; }
 }

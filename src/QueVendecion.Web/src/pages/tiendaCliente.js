@@ -224,12 +224,13 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
           ${productos.map((p, i) => {
             const agotado = p.tieneInventario && (p.stock ?? 0) <= 0;
             return `
-                  <div class="card animate-fade-in" style="animation-delay:${i * 30}ms" data-product-id="${p.id}" data-nombre="${p.nombre}" data-precio="${p.precio}" ${agotado ? 'data-agotado="1"' : ''}>
+                  <div class="card animate-fade-in" style="animation-delay:${i * 30}ms" data-product-id="${p.id}" data-nombre="${p.nombre}" data-precio="${p.precio}" data-papel="${p.consumePapel ? '1' : '0'}" data-doble="${p.admiteDobleCara ? '1' : '0'}" ${agotado ? 'data-agotado="1"' : ''}>
                     <div class="flex-1 mr-4">
                       <h3 class="font-semibold text-primary text-[0.9375rem]">${p.nombre}</h3>
                       ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5 leading-relaxed">${p.descripcion}</p>` : ''}
                       <div class="flex flex-wrap items-center gap-2 mt-2">
                         <span class="inline-block font-bold text-accent text-lg">$${p.precio.toFixed(2)}</span>
+                        ${p.consumePapel ? '<span class="text-sm">por cara · papel sujeto a disponibilidad</span>' : ''}
                         ${p.tieneInventario
                           ? `<span class="badge ${agotado ? 'bg-error/10 text-error' : 'bg-surface text-text-secondary'}">
                               ${agotado ? '<i data-lucide="package-x" class="w-3.5 h-3.5"></i> Agotado' : `<i data-lucide="package" class="w-3.5 h-3.5"></i> ${p.stock} disponibles`}
@@ -238,6 +239,7 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
                       </div>
                     </div>
                     <div class="flex flex-col items-center gap-2">
+                      ${p.consumePapel ? `<div class="space-y-2 text-sm"><label>Caras por juego<input class="input-field papel-caras" type="number" min="1" max="100000" step="1" value="1"></label><label>Juegos<input class="input-field papel-juegos" type="number" min="1" max="100000" step="1" value="1"></label><label>Lados<select class="input-field papel-lados"><option value="uno">Un lado</option>${p.admiteDobleCara ? '<option value="ambos">Ambos lados</option>' : ''}</select></label><p class="papel-preview">1 cara · 1 hoja · $${p.precio.toFixed(2)}</p><button class="btn-accent papel-agregar" type="button">Agregar servicio</button></div>` : `
                       <div class="flex items-center gap-2 ${agotado ? 'opacity-40 pointer-events-none' : ''}">
                     <button class="qty-btn minus" data-id="${p.id}">
                       <i data-lucide="minus" class="w-4 h-4"></i>
@@ -246,7 +248,7 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
                     <button class="qty-btn plus" data-id="${p.id}">
                       <i data-lucide="plus" class="w-4 h-4"></i>
                     </button>
-                  </div>
+                  </div>`}
                 </div>
               </div>
             </div>
@@ -342,6 +344,31 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
 }
 
 function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones) {
+  content.querySelectorAll('[data-papel="1"]').forEach(card => {
+    const caras = card.querySelector('.papel-caras');
+    const juegos = card.querySelector('.papel-juegos');
+    const lados = card.querySelector('.papel-lados');
+    const preview = card.querySelector('.papel-preview');
+    const calcular = () => {
+      const c = Number(caras.value), j = Number(juegos.value);
+      if (!Number.isSafeInteger(c) || !Number.isSafeInteger(j) || c <= 0 || j <= 0 || c * j > 100000) {
+        preview.textContent = 'Captura enteros positivos; máximo 100000 caras.'; return null;
+      }
+      const cantidad = c * j;
+      const hojas = (lados.value === 'ambos' ? Math.ceil(c / 2) : c) * j;
+      preview.textContent = `${cantidad} caras · ${hojas} hojas · $${(Number(card.dataset.precio) * cantidad).toFixed(2)}`;
+      return { cantidad, hojas, carasPorJuego: c, juegos: j, dobleCara: lados.value === 'ambos' };
+    };
+    for (const campo of [caras, juegos, lados]) campo.addEventListener('input', calcular);
+    card.querySelector('.papel-agregar').addEventListener('click', () => {
+      const resultado = calcular();
+      if (!resultado) return;
+      const id = card.dataset.productId;
+      carrito[id] = { id, nombre: card.dataset.nombre, precio: Number(card.dataset.precio), ...resultado };
+      updateCarrito(carrito);
+      actualizarBarra(content, carrito);
+    });
+  });
   content.querySelectorAll('.qty-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const card = btn.closest('[data-product-id]');
@@ -404,7 +431,8 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
   btnConfirmar?.addEventListener('click', async () => {
     const items = Object.values(carrito).map(c => ({
       productoId: parseInt(c.id),
-      cantidad: c.cantidad
+      cantidad: c.cantidad,
+      carasPorJuego: c.carasPorJuego ?? null, juegos: c.juegos ?? null, dobleCara: c.dobleCara ?? null
     }));
 
     if (items.length === 0) return;
@@ -485,7 +513,7 @@ function mostrarResumen(content, carrito) {
 
   resumen.innerHTML = items.map(c => `
     <div class="flex justify-between text-sm py-1">
-      <span class="text-primary">${c.nombre} <span class="text-text-secondary">×${c.cantidad}</span></span>
+      <span class="text-primary">${escapeHtml(c.nombre)} <span class="text-text-secondary">×${c.cantidad}${c.carasPorJuego ? ` · ${c.carasPorJuego} caras/juego, ${c.juegos} juegos, ${c.dobleCara ? 'ambos lados' : 'un lado'}, ${c.hojas} hojas` : ''}</span></span>
       <span class="font-semibold text-primary">$${(c.precio * c.cantidad).toFixed(2)}</span>
     </div>
   `).join('') + `
@@ -551,7 +579,7 @@ function renderPedidosTab(content, slug, cliente, zonaHoraria) {
           ${p.estado === 'Listo' ? '<p class="text-sm text-success">Pedido listo para recoger o entregar</p>' : ''}
           ${p.items.map(i => `
             <div class="flex justify-between text-sm">
-              <span class="text-primary">${i.productoNombre} <span class="text-text-secondary">×${i.cantidad}</span></span>
+              <span class="text-primary">${i.productoNombre} <span class="text-text-secondary">×${i.cantidad}${i.carasPorJuego ? ` · ${i.carasPorJuego} caras/juego, ${i.juegos} juegos, ${i.dobleCara ? 'ambos lados' : 'un lado'}` : ''}</span></span>
               <span class="font-medium text-primary">$${i.subtotal.toFixed(2)}</span>
             </div>
           `).join('')}

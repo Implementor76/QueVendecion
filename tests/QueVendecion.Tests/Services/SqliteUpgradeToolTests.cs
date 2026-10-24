@@ -33,8 +33,10 @@ public class SqliteUpgradeToolTests
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
 
-    [Fact]
-    public async Task VersionAnteriorConPinyexYMovimientosSeConservaEnDosPasadas()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VersionAnteriorConPinyexYMovimientosSeConservaEnDosPasadas(bool sinMostrador)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root != null && !File.Exists(Path.Combine(root.FullName, "QueVendecion.sln"))) root = root.Parent;
@@ -46,7 +48,7 @@ public class SqliteUpgradeToolTests
         var segunda = Path.Combine(carpeta, "segunda.db");
         try
         {
-            await CrearVersionAnterior(origen);
+            await CrearVersionAnterior(origen, sinMostrador);
             var dll = Path.Combine(root.FullName, "tools", "QueVendecion.SqliteUpgrade", "bin", "Debug", "net9.0", "QueVendecion.SqliteUpgrade.dll");
             Assert.True(File.Exists(dll), dll);
             var resultado1 = await Ejecutar(dll, origen, primera);
@@ -65,14 +67,17 @@ public class SqliteUpgradeToolTests
             Assert.Equal(12L, await Escalar(conn, "SELECT StockNuevo FROM MovimientosInventario WHERE ProductoId=2 AND Tipo=2"));
             Assert.Equal(0L, await Escalar(conn, "SELECT Origen FROM Pedidos WHERE Id=1"));
             Assert.Equal(DBNull.Value, await Escalar(conn, "SELECT ClaveIdempotencia FROM Pedidos WHERE Id=1"));
+            Assert.Equal(0L, await Escalar(conn, "SELECT AdmiteDobleCara FROM Productos WHERE Id=3"));
+            Assert.Equal(DBNull.Value, await Escalar(conn, "SELECT PapelInsumoId FROM Productos WHERE Id=3"));
+            Assert.Equal(DBNull.Value, await Escalar(conn, "SELECT HojasConsumidas FROM ItemsPedido WHERE PedidoId=2"));
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(carpeta, true); }
     }
 
-    private static async Task CrearVersionAnterior(string path)
+    private static async Task CrearVersionAnterior(string path, bool sinMostrador = true)
     {
         var options = new DbContextOptionsBuilder<QueVendecionDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options;
-        await using (var db = new QueVendecionDbContext(options))
+        await using (var db = new LegacyDbContext(options))
         {
             await db.Database.EnsureCreatedAsync();
             db.Tiendas.AddRange(new Tienda { Nombre = "Jax ficticia", Slug = "jax-ficticia" },
@@ -100,6 +105,7 @@ public class SqliteUpgradeToolTests
                 new MovimientoInventario { ProductoId = 2, Tipo = TipoMovimiento.Ajuste, Cantidad = 1, StockAnterior = 11, StockNuevo = 12, UsuarioId = 1, Observaciones = "Ajuste ficticio" });
             await db.SaveChangesAsync();
         }
+        if (!sinMostrador) return;
         await using var conn = new SqliteConnection($"Data Source={path};Pooling=False");
         await conn.OpenAsync();
         foreach (var sql in new[] { "DROP INDEX IX_Pedidos_TiendaId_ClaveIdempotencia",
@@ -108,6 +114,17 @@ public class SqliteUpgradeToolTests
             "ALTER TABLE Pedidos DROP COLUMN Origen" })
         {
             await using var cmd = conn.CreateCommand(); cmd.CommandText = sql; await cmd.ExecuteNonQueryAsync();
+        }
+    }
+
+    private sealed class LegacyDbContext(DbContextOptions<QueVendecionDbContext> options) : QueVendecionDbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<Producto>().Ignore(p => p.PapelInsumoId).Ignore(p => p.AdmiteDobleCara).Ignore(p => p.PapelInsumo);
+            modelBuilder.Entity<ItemPedido>().Ignore(i => i.CarasPorJuego).Ignore(i => i.Juegos).Ignore(i => i.DobleCara)
+                .Ignore(i => i.PapelInsumoIdHistorico).Ignore(i => i.HojasConsumidas);
         }
     }
 

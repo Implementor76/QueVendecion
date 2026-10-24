@@ -120,7 +120,14 @@ public class PedidoService : IPedidoService
             throw new ReglaNegocioException("nota_invalida", "La nota debe tener 500 caracteres o menos.");
         var clave = dto.ClaveIdempotencia.ToString("D");
         var huella = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { dto.ProductoId, dto.Cantidad, dto.CarasPorJuego, dto.Juegos, dto.DobleCara,
+                dto.PapelInsumoIdEsperado, dto.AdmiteDobleCaraEsperado, dto.PrecioEsperado, dto.FormaPago, Nota = nota }))));
+        // Las ventas previas a la configuracion de papel usaron esta huella. Sus reintentos
+        // conservan el mismo resultado sin registrar otra venta ni modificar inventario.
+        var huellaAnterior = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(new { dto.ProductoId, dto.Cantidad, dto.PrecioEsperado, dto.FormaPago, Nota = nota }))));
+        var solicitudAnterior = dto.CarasPorJuego == null && dto.Juegos == null && dto.DobleCara == null &&
+            dto.PapelInsumoIdEsperado == null && !dto.AdmiteDobleCaraEsperado;
 
         // The unique index and the transaction commit together decide the winning request.
         // After a concurrent insert or transient SQLite lock, read the committed winner.
@@ -134,7 +141,8 @@ public class PedidoService : IPedidoService
                         .FirstOrDefaultAsync(p => p.TiendaId == tiendaId && p.ClaveIdempotencia == clave);
                     if (anterior != null)
                     {
-                        if (anterior.HuellaSolicitud != huella)
+                        if (anterior.HuellaSolicitud != huella &&
+                            !(solicitudAnterior && anterior.HuellaSolicitud == huellaAnterior))
                             throw new ReglaNegocioException("idempotencia_conflicto", "Esta clave ya registró una venta distinta.");
                         return MapToDto(anterior);
                     }
@@ -142,8 +150,17 @@ public class PedidoService : IPedidoService
                         .FirstOrDefaultAsync(p => p.Id == dto.ProductoId && p.TiendaId == tiendaId);
                     if (producto == null || !producto.Disponible)
                         throw new ReglaNegocioException("producto_no_disponible", "El servicio no está disponible en tu tienda.");
-                    if (producto.TieneInventario)
-                        throw new ReglaNegocioException("inventario_no_permitido", "Esta versión solo admite servicios sin control de existencias.");
+                    if (producto.PapelInsumoId != dto.PapelInsumoIdEsperado || producto.AdmiteDobleCara != dto.AdmiteDobleCaraEsperado)
+                        throw new ReglaNegocioException("papel_configuracion_cambio", "Cambió la configuración del servicio. Revisa el consumo antes de cobrar.");
+                    PapelCalculo? papel = null;
+                    if (producto.PapelInsumoId.HasValue)
+                    {
+                        papel = PapelReglas.Calcular(dto.CarasPorJuego, dto.Juegos, dto.DobleCara, producto.AdmiteDobleCara);
+                        if (dto.Cantidad != papel.Value.CarasCobradas)
+                            throw new ReglaNegocioException("papel_cantidad_invalida", "El total de caras no coincide con los juegos.");
+                    }
+                    else if (dto.CarasPorJuego.HasValue || dto.Juegos.HasValue || dto.DobleCara.HasValue)
+                        throw new ReglaNegocioException("papel_configuracion_cambio", "Este producto no tiene consumo de papel configurado.");
                     if (producto.Precio < 0)
                         throw new ReglaNegocioException("precio_invalido", "El servicio tiene un precio inválido.");
                     if (producto.Precio != dto.PrecioEsperado)
@@ -173,9 +190,16 @@ public class PedidoService : IPedidoService
                             { Anterior = null, Nuevo = EstadoPedido.Entregado, FechaUtc = ahora, UsuarioId = usuarioId } }),
                         Items = new List<ItemPedido> { new()
                             { ProductoId = producto.Id, Cantidad = dto.Cantidad, PrecioUnitario = producto.Precio,
-                                CostoUnitarioHistorico = producto.CostoUnitario } }
+                                CostoUnitarioHistorico = producto.CostoUnitario,
+                                CarasPorJuego = dto.CarasPorJuego, Juegos = dto.Juegos, DobleCara = dto.DobleCara,
+                                PapelInsumoIdHistorico = producto.PapelInsumoId, HojasConsumidas = papel?.HojasConsumidas } }
                     };
                     _context.Pedidos.Add(pedido);
+                    await _context.SaveChangesAsync();
+                    var salidas = new List<(int ProductoId, int Cantidad, string Motivo)>();
+                    if (producto.TieneInventario) salidas.Add((producto.Id, dto.Cantidad, "Venta de mostrador"));
+                    if (papel.HasValue) salidas.Add((producto.PapelInsumoId!.Value, papel.Value.HojasConsumidas, "Papel para servicio de copias"));
+                    await ConsumirAsync(pedido.Id, tiendaId, salidas, usuarioId);
                     await _context.SaveChangesAsync();
                     return MapToDto(pedido);
                 });
@@ -216,36 +240,54 @@ public class PedidoService : IPedidoService
         pedido.HistorialEstadosJson = JsonSerializer.Serialize(new[] { new CambioEstadoPedidoDto
             { Anterior = null, Nuevo = EstadoPedido.Recibido, FechaUtc = pedido.CreadoEn } });
 
-        var requisiciones = new Dictionary<Producto, int>();
+        var salidas = new List<(int ProductoId, int Cantidad, string Motivo)>();
         var productos = new List<Producto>();
 
-        foreach (var itemDto in dto.Items.GroupBy(i => i.ProductoId)
-            .Select(g => new CrearItemPedidoDto { ProductoId = g.Key, Cantidad = g.Sum(i => i.Cantidad) })
-            .OrderBy(i => i.ProductoId))
+        foreach (var grupo in dto.Items.GroupBy(i => i.ProductoId).OrderBy(g => g.Key))
         {
-            var producto = await _context.Productos.FindAsync(itemDto.ProductoId);
+            var producto = await _context.Productos.FindAsync(grupo.Key);
             if (producto == null)
-                throw new InvalidOperationException($"Producto {itemDto.ProductoId} no encontrado");
+                throw new InvalidOperationException($"Producto {grupo.Key} no encontrado");
 
             await _context.Entry(producto).ReloadAsync();
             if (producto.TiendaId != dto.TiendaId || !producto.Disponible)
                 throw new ReglaNegocioException("producto_no_disponible", "Un producto ya no está disponible en esta tienda.");
 
-            if (producto.TieneInventario && (producto.Stock ?? 0) < itemDto.Cantidad)
-                throw new ReglaNegocioException("stock_insuficiente", $"Stock insuficiente para {producto.Nombre}. Reduce la cantidad e intenta de nuevo.");
-
-            requisiciones[producto] = itemDto.Cantidad;
+            PapelCalculo? papel = null;
+            var itemDto = grupo.First();
+            int cantidad;
+            if (producto.PapelInsumoId.HasValue)
+            {
+                if (grupo.Count() != 1)
+                    throw new ReglaNegocioException("papel_cantidad_invalida", "Incluye una sola configuración por servicio.");
+                papel = PapelReglas.Calcular(itemDto.CarasPorJuego, itemDto.Juegos, itemDto.DobleCara, producto.AdmiteDobleCara);
+                if (itemDto.Cantidad != papel.Value.CarasCobradas)
+                    throw new ReglaNegocioException("papel_cantidad_invalida", "El total de caras no coincide con los juegos.");
+                cantidad = papel.Value.CarasCobradas;
+            }
+            else
+            {
+                if (grupo.Any(i => i.CarasPorJuego.HasValue || i.Juegos.HasValue || i.DobleCara.HasValue))
+                    throw new ReglaNegocioException("papel_configuracion_cambio", "Este producto no tiene consumo de papel configurado.");
+                var suma = grupo.Sum(i => (long)i.Cantidad);
+                if (suma <= 0 || suma > int.MaxValue) throw new ReglaNegocioException("cantidad_invalida", "Cantidad fuera de rango.");
+                cantidad = (int)suma;
+            }
             productos.Add(producto);
 
             var item = new ItemPedido
             {
-                ProductoId = itemDto.ProductoId,
-                Cantidad = itemDto.Cantidad,
+                ProductoId = producto.Id,
+                Cantidad = cantidad,
                 PrecioUnitario = producto.Precio,
-                CostoUnitarioHistorico = producto.CostoUnitario
+                CostoUnitarioHistorico = producto.CostoUnitario,
+                CarasPorJuego = itemDto.CarasPorJuego, Juegos = itemDto.Juegos, DobleCara = itemDto.DobleCara,
+                PapelInsumoIdHistorico = producto.PapelInsumoId, HojasConsumidas = papel?.HojasConsumidas
             };
 
             pedido.Items.Add(item);
+            if (producto.TieneInventario) salidas.Add((producto.Id, cantidad, "Venta pedido"));
+            if (papel.HasValue) salidas.Add((producto.PapelInsumoId!.Value, papel.Value.HojasConsumidas, "Papel para servicio de copias"));
         }
 
         OperacionReglas.ValidarPedido(operacion, dto, productos, DateTime.UtcNow);
@@ -258,28 +300,39 @@ public class PedidoService : IPedidoService
         _context.Pedidos.Add(pedido);
         await _context.SaveChangesAsync();
 
-        foreach (var (producto, cantidad) in requisiciones)
-        {
-            if (!producto.TieneInventario) continue;
-
-            var stockAnterior = producto.Stock ?? 0;
-            producto.Stock = stockAnterior - cantidad;
-
-            _context.MovimientosInventario.Add(new MovimientoInventario
-            {
-                ProductoId = producto.Id,
-                Tipo = TipoMovimiento.Salida,
-                Cantidad = cantidad,
-                StockAnterior = stockAnterior,
-                StockNuevo = producto.Stock.Value,
-                PedidoId = pedido.Id,
-                Observaciones = $"Venta pedido {pedido.Id}"
-            });
-        }
+        await ConsumirAsync(pedido.Id, dto.TiendaId, salidas, null);
 
         await _context.SaveChangesAsync();
 
         return await ObtenerPorIdAsync(pedido.Id) ?? MapToDto(pedido);
+    }
+
+    private async Task ConsumirAsync(int pedidoId, int tiendaId,
+        List<(int ProductoId, int Cantidad, string Motivo)> salidas, int? usuarioId)
+    {
+        foreach (var grupo in salidas.GroupBy(s => s.ProductoId).OrderBy(g => g.Key))
+        {
+            var producto = await _context.Productos.FirstOrDefaultAsync(p => p.Id == grupo.Key && p.TiendaId == tiendaId);
+            if (producto == null) throw new ReglaNegocioException("papel_invalido", "El insumo ya no pertenece a esta tienda.");
+            await _context.Entry(producto).ReloadAsync();
+            if (!producto.TieneInventario || producto.Stock == null)
+                throw new ReglaNegocioException("inventario_inactivo", "El insumo no tiene inventario activo.");
+            var total = grupo.Sum(s => (long)s.Cantidad);
+            if (total > producto.Stock || total <= 0)
+                throw new ReglaNegocioException("stock_insuficiente", $"Stock insuficiente para {producto.Nombre}.");
+            foreach (var salida in grupo)
+            {
+                var anterior = producto.Stock.Value;
+                producto.Stock = anterior - salida.Cantidad;
+                _context.MovimientosInventario.Add(new MovimientoInventario
+                {
+                    ProductoId = producto.Id, Tipo = TipoMovimiento.Salida, Cantidad = salida.Cantidad,
+                    StockAnterior = anterior, StockNuevo = producto.Stock.Value, PedidoId = pedidoId,
+                    UsuarioId = usuarioId, Observaciones = salida.Motivo == "Venta pedido"
+                        ? $"Venta pedido {pedidoId}" : salida.Motivo
+                });
+            }
+        }
     }
 
     public Task<PedidoDto?> ActualizarEstadoAsync(int id, EstadoPedido estado, int? usuarioId = null) =>
@@ -444,7 +497,9 @@ public class PedidoService : IPedidoService
             ProductoNombre = i.Producto?.Nombre ?? "",
             Cantidad = i.Cantidad,
             PrecioUnitario = i.PrecioUnitario,
-            Subtotal = i.Subtotal
+            Subtotal = i.Subtotal,
+            CarasPorJuego = i.CarasPorJuego, Juegos = i.Juegos, DobleCara = i.DobleCara,
+            HojasConsumidas = i.HojasConsumidas
         }).ToList()
     };
 

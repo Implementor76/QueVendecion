@@ -78,7 +78,7 @@ internal static class SqliteUpgradeValidation
 
     private static async Task VerificarColumnaNuevaAsync(SqliteConnection conexion, string tabla, string columna)
     {
-        var cero = tabla == "Productos" && columna == "TieneInventario" || tabla == "Pedidos" && columna == "Origen";
+        var cero = tabla == "Productos" && columna is "TieneInventario" or "AdmiteDobleCara" || tabla == "Pedidos" && columna == "Origen";
         await using var comando = conexion.CreateCommand();
         comando.CommandText = $"SELECT \"Id\" FROM {Identificador(tabla)} WHERE {Identificador(columna)} IS " +
             (cero ? "NULL OR " + Identificador(columna) + " <> 0" : "NOT NULL") + " LIMIT 1";

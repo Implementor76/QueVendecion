@@ -52,12 +52,19 @@ public class ItemPedidoDto
     public int Cantidad { get; set; }
     public decimal PrecioUnitario { get; set; }
     public decimal Subtotal { get; set; }
+    public int? CarasPorJuego { get; set; }
+    public int? Juegos { get; set; }
+    public bool? DobleCara { get; set; }
+    public int? HojasConsumidas { get; set; }
 }
 
 public class CrearItemPedidoDto
 {
     public int ProductoId { get; set; }
     public int Cantidad { get; set; }
+    public int? CarasPorJuego { get; set; }
+    public int? Juegos { get; set; }
+    public bool? DobleCara { get; set; }
 }
 
 public class RegistrarVentaMostradorDto
@@ -65,6 +72,11 @@ public class RegistrarVentaMostradorDto
     public Guid ClaveIdempotencia { get; set; }
     public int ProductoId { get; set; }
     public int Cantidad { get; set; }
+    public int? CarasPorJuego { get; set; }
+    public int? Juegos { get; set; }
+    public bool? DobleCara { get; set; }
+    public int? PapelInsumoIdEsperado { get; set; }
+    public bool AdmiteDobleCaraEsperado { get; set; }
     public decimal PrecioEsperado { get; set; }
     public FormaPago FormaPago { get; set; }
     public string? Nota { get; set; }
