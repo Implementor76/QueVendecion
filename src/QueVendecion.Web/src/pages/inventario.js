@@ -36,7 +36,7 @@ export async function renderInventario(container) {
         <p class="text-sm">Venta ${money(p.precio)} · Costo ${p.costoUnitario == null ? 'Desconocido' : money(p.costoUnitario)} · Diferencia ${p.costoUnitario == null ? 'No calculable' : money(p.precio - p.costoUnitario)}</p>
         <p class="text-sm">${p.tieneInventario ? `Disponible: ${p.stock} · Mínimo: ${p.existenciaMinima ?? 'Sin definir'}${p.existenciaMinima != null && p.stock <= p.existenciaMinima ? ' · Stock bajo' : ''}` : 'Sin control de existencias'}</p>
         ${p.tieneInventario ? `<div class="flex flex-wrap gap-2 mt-3"><button class="btn-accent btn-compra" type="button">Entrada por compra</button><button class="btn-ghost btn-ajuste" type="button">Ajuste</button><button class="btn-ghost btn-movimientos" type="button">Movimientos</button></div>
-          <div class="detalle mt-3"></div>` : '<p class="text-sm mt-2">Activa el inventario desde Menú y captura la existencia inicial.</p>'}
+          <div class="detalle mt-3"></div>` : ''}
       </article>`).join('') || '<p class="card">No hay productos.</p>';
       lista.querySelectorAll('article').forEach(card => {
         const id = Number(card.dataset.id);
@@ -63,7 +63,7 @@ export async function renderInventario(container) {
     e.preventDefault();
     try {
       const r = await api.pedidos.resumen(container.querySelector('#desde').value, container.querySelector('#hasta').value);
-      container.querySelector('#resumen').innerHTML = `<p>${r.pedidosEntregados} pedidos entregados · Ventas ${money(r.ventasEntregadas)}</p><p>Costo registrado ${money(r.costoRegistrado)} · Utilidad bruta estimada ${money(r.utilidadBrutaEstimada)}</p><p>${r.lineasSinCosto} líneas sin costo (${money(r.importeSinCosto)} de venta fuera del cálculo)</p><p>Entregado y pagado ${money(r.entregadoPagado)} · Pendiente de cobro ${money(r.entregadoPendienteCobro)}</p><p>Pedidos por atender ${r.pedidosPorAtender}${r.entregadosSinInstante ? ` · ${r.entregadosSinInstante} entregados históricos sin instante verificable` : ''}</p>`;
+      container.querySelector('#resumen').innerHTML = `<p>${r.pedidosEntregados} ${r.pedidosEntregados === 1 ? 'pedido entregado' : 'pedidos entregados'} · Ventas ${money(r.ventasEntregadas)}</p><p>Costo registrado ${money(r.costoRegistrado)} · Utilidad bruta estimada ${money(r.utilidadBrutaEstimada)}</p><p>${r.lineasSinCosto} líneas sin costo (${money(r.importeSinCosto)} de venta fuera del cálculo)</p><p>Entregado y pagado ${money(r.entregadoPagado)} · Pendiente de cobro ${money(r.entregadoPendienteCobro)}</p><p>Pedidos por atender ${r.pedidosPorAtender}${r.entregadosSinInstante ? ` · ${r.entregadosSinInstante} entregados históricos sin instante verificable` : ''}</p>`;
       mensaje.textContent = '';
     } catch (err) { mensaje.textContent = err.message; }
   };

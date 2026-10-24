@@ -109,3 +109,44 @@ para el nombre real de la unidad, `lsof` para conexiones a `.db`, `-wal` y
 herramienta no reemplaza la base activa: entrega la copia actualizada para
 comparación y un cambio controlado. Ninguno de estos comandos se ejecutó en
 `srvubu01` durante esta etapa.
+
+## Validación integrada local (23 de octubre de 2026)
+
+Se ejecutaron Vite en `127.0.0.1:5173` y la API real en
+`127.0.0.1:5136`, con `Development` y una SQLite **nueva y temporal** bajo
+`.integration`. Se crearon tiendas, administradores y una cliente ficticios.
+Las bases existentes y `srvubu01` permanecieron intactas. Chrome usó la API
+real; se contrastaron respuestas HTTP con consultas SQLite de solo lectura.
+
+| Comprobación | Esperado | Observado |
+| --- | --- | --- |
+| Alta de pluma | 12 unidades; mínimo 3; costo 3.9167; venta $10 | Valores exactos y movimiento inicial `0 → 12` con administradora |
+| Primer pedido, 2 unidades | Stock 10; costo histórico 3.9167 | Stock 10; línea SQLite 3.9167, precio histórico $10 |
+| Compra, 12 a $4.50 | Stock 22; referencia 4.50; primer costo intacto | Stock 22; referencia 4.50; primera línea siguió en 3.9167 |
+| Confirmar y cancelar | Stock 24; reintegro único | Stock 24; repetir cancelación conservó 24 |
+| Segundo pedido, 3 unidades | Stock 21; costo histórico 4.50 | Stock 21; línea SQLite 4.50 |
+| Entrega directa | Sin otro descuento; pago pendiente | `Entregado`, `Pendiente`, stock 21 |
+| Resumen del día local de entrega | Ventas $30; costo $13.50; utilidad $16.50; pendiente de cobro $30; cancelado excluido | Los cinco valores coincidieron; un solo pedido entregado |
+| Ajuste de -1 | Stock 20, motivo, usuario y saldos | `21 → 20`, motivo y administradora registrados |
+| Sobreventa | Rechazo sin escritura parcial | Desde navegador se mostró “Stock insuficiente”; HTTP 400 `stock_insuficiente`; stock 20 |
+| Edición | Nombre y precio nuevos sin modificar stock | Nombre y precio $11; stock 20 |
+| Costos opcionales | `NULL` diferente de cero | Ambos persistieron y se mostraron como “Desconocido” y `$0.00` |
+| Privacidad y tiendas | Costos privados y aislamiento | Catálogo y Mis pedidos sin campos de costo/utilidad; otra tienda recibió 404 al consultar movimientos, producto y compra |
+| Zona horaria y móvil | Hermosillo; interfaz usable | Historial coincidió con `America/Hermosillo`; pedido, compra, ajuste y resumen funcionaron a 390 px; inventario revisado también a 1280 px |
+
+La consulta final de la SQLite temporal confirmó seis movimientos para la
+pluma: inicial, salida, compra, reintegro, segunda salida y ajuste. Los saldos
+fueron `0 → 12 → 10 → 22 → 24 → 21 → 20`. `PRAGMA integrity_check` devolvió
+`ok` y `foreign_key_check` no devolvió filas. Chrome no registró excepciones
+JavaScript. En modo desarrollo hubo un `console.error` de la API para el 400
+esperado en la sobreventa; se mostró el mensaje de rechazo y el flujo continuó.
+
+La revisión previa con API simulada solo comprobaba presentación y respuestas
+preparadas. Esta ejecución verificó autenticación real, transacciones,
+persistencia, costos históricos, aislamiento, rechazo de sobreventa y resumen
+contra la base temporal. Se corrigieron dos textos de la vista administrativa:
+el singular de “pedido entregado” y una sugerencia de activar inventario que
+aparecía incluso en servicios que no necesitan control de existencias. No se
+encontró un defecto de cálculo o inventario en la implementación. La pasada
+final dejó 71 pruebas .NET y 3 pruebas frontend aprobadas, además de build
+.NET y Vite correctos.
