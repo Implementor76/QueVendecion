@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using QueVendecion.Infrastructure.Data;
+using QueVendecion.SqliteUpgrade;
 
 if (args.Length != 2)
     throw new ArgumentException("Uso: QueVendecion.SqliteUpgrade <origen.db> <copia-nueva.db>");
@@ -21,9 +22,7 @@ await using var destinationConnection = new SqliteConnection(destinationBuilder.
 await sourceConnection.OpenAsync();
 await destinationConnection.OpenAsync();
 sourceConnection.BackupDatabase(destinationConnection);
-var before = await Counts(destinationConnection);
-var beforeHasStock = await HasColumn(destinationConnection, "Productos", "Stock");
-var beforeValues = await BusinessValues(destinationConnection, beforeHasStock);
+var before = await SqliteUpgradeValidation.CapturarAsync(destinationConnection);
 await destinationConnection.CloseAsync();
 
 var dbOptions = new DbContextOptionsBuilder<QueVendecionDbContext>().UseSqlite(destinationBuilder.ToString()).Options;
@@ -40,10 +39,7 @@ await using (var db = new QueVendecionDbContext(dbOptions))
 }
 
 await destinationConnection.OpenAsync();
-var after = await Counts(destinationConnection);
-if (!before.SequenceEqual(after)) throw new InvalidOperationException("Los conteos cambiaron durante el ensayo.");
-if (!beforeValues.SequenceEqual(await BusinessValues(destinationConnection, beforeHasStock)))
-    throw new InvalidOperationException("Cambió un precio, pedido o existencia durante el ensayo.");
+await SqliteUpgradeValidation.VerificarAsync(destinationConnection, before);
 await using (var integrity = destinationConnection.CreateCommand())
 {
     integrity.CommandText = "PRAGMA integrity_check";
@@ -57,52 +53,4 @@ await using (var foreignKeys = destinationConnection.CreateCommand())
     if (await reader.ReadAsync()) throw new InvalidOperationException("La copia tiene claves foráneas inválidas.");
 }
 Console.WriteLine($"Copia actualizada y verificada: {destination}");
-Console.WriteLine(string.Join(", ", after.Select(kv => $"{kv.Key}={kv.Value}")));
-
-static async Task<Dictionary<string, long>> Counts(SqliteConnection connection)
-{
-    var result = new Dictionary<string, long>();
-    foreach (var table in new[] { "Tiendas", "UsuariosTienda", "Clientes", "Productos", "Pedidos", "ItemsPedido" })
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM \"{table}\""; // Fixed table names only.
-        result[table] = (long)(await command.ExecuteScalarAsync() ?? 0L);
-    }
-    return result;
-}
-
-static async Task<bool> HasColumn(SqliteConnection connection, string table, string column)
-{
-    await using var command = connection.CreateCommand();
-    command.CommandText = $"PRAGMA table_info(\"{table}\")";
-    await using var rows = await command.ExecuteReaderAsync();
-    while (await rows.ReadAsync()) if (rows.GetString(1) == column) return true;
-    return false;
-}
-
-static async Task<List<string>> BusinessValues(SqliteConnection connection, bool includeStock)
-{
-    var result = new List<string>();
-    foreach (var (table, columns) in new[]
-    {
-        ("Productos", includeStock ? new[] { "Id", "Precio", "CostoUnitario", "Stock" } : new[] { "Id", "Precio", "CostoUnitario" }),
-        ("Pedidos", new[] { "Id", "Total", "Estado", "EstadoPago", "ClienteId", "Origen", "EntregadoEnUtc" }),
-        ("ItemsPedido", new[] { "Id", "PrecioUnitario", "CostoUnitarioHistorico", "Cantidad" })
-    })
-    {
-        var available = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using (var schema = connection.CreateCommand())
-        {
-            schema.CommandText = $"PRAGMA table_info(\"{table}\")";
-            await using var reader = await schema.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) available.Add(reader.GetString(1));
-        }
-        var selected = columns.Where(available.Contains).ToArray();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT {string.Join(", ", selected.Select(c => $"\"{c}\""))} FROM \"{table}\" ORDER BY \"Id\"";
-        await using var rows = await command.ExecuteReaderAsync();
-        while (await rows.ReadAsync())
-            result.Add(table + ":" + string.Join("|", Enumerable.Range(0, rows.FieldCount).Select(i => rows.IsDBNull(i) ? "NULL" : Convert.ToString(rows.GetValue(i), System.Globalization.CultureInfo.InvariantCulture))));
-    }
-    return result;
-}
+Console.WriteLine(string.Join(", ", before.Conteos));

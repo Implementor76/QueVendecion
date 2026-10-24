@@ -30,7 +30,7 @@ Si la cadena de conexión se define en archivos, **no imprimirlos** en la consol
 
 ## Ensayo local realizado
 
-`tools/QueVendecion.SqliteUpgrade` recibe origen y ruta de copia nueva. Abre el origen en modo solo lectura, usa la API de respaldo de SQLite para crear una copia consistente, actualiza **solo la copia** con los puentes de inventario y operación, verifica conteos, integridad y claves foráneas. Se niega a sobrescribir un destino existente. Es una herramienta de transición para la base SQLite informada; no modifica la selección del proveedor en la API ni sustituye un plan de migraciones SQLite a largo plazo.
+`tools/QueVendecion.SqliteUpgrade` recibe origen y ruta de copia nueva. Abre el origen en modo solo lectura, usa la API de respaldo de SQLite para crear una copia consistente, actualiza **solo la copia** con los puentes de inventario, operación, costos y mostrador, y verifica las columnas originales fila por fila, los valores iniciales de las columnas nuevas, integridad y claves foráneas. Se niega a sobrescribir un destino existente. Es una herramienta de transición para la base SQLite informada; no modifica la selección del proveedor en la API ni sustituye un plan de migraciones SQLite a largo plazo. El fallo de comparación detectado después, con una base que ya tenía Pinyex, y su corrección están documentados en [venta-mostrador.md](venta-mostrador.md).
 
 ```powershell
 dotnet run --project tools/QueVendecion.SqliteUpgrade -- <origen.db> <copia-nueva.db>

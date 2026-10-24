@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\src\QueVendecion.Domain\QueVendecion.Domain.csproj" />
     <ProjectReference Include="..\..\src\QueVendecion.Application\QueVendecion.Application.csproj" />
     <ProjectReference Include="..\..\src\QueVendecion.Infrastructure\QueVendecion.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\tools\QueVendecion.SqliteUpgrade\QueVendecion.SqliteUpgrade.csproj" />
   </ItemGroup>
 
   <ItemGroup>
