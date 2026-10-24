@@ -16,6 +16,9 @@ public class PedidoConfiguration : IEntityTypeConfiguration<Pedido>
         builder.Property(p => p.HorarioConfirmado).HasMaxLength(100);
         builder.Property(p => p.DireccionEntrega).HasMaxLength(300);
         builder.Property(p => p.HistorialEstadosJson).HasColumnType("text");
+        builder.Property(p => p.ClaveIdempotencia).HasMaxLength(36);
+        builder.Property(p => p.HuellaSolicitud).HasMaxLength(64);
+        builder.HasIndex(p => new { p.TiendaId, p.ClaveIdempotencia }).IsUnique();
         builder.HasIndex(p => new { p.TiendaId, p.EntregadoEnUtc });
         builder.HasIndex(p => new { p.TiendaId, p.FechaServicio, p.Estado });
         builder.HasOne(p => p.Tienda)

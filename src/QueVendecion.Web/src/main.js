@@ -5,6 +5,7 @@ import { renderTienda } from './pages/tienda.js';
 import { renderPedidos } from './pages/pedidos.js';
 import { renderMenu } from './pages/menu.js';
 import { renderInventario } from './pages/inventario.js';
+import { renderMostrador } from './pages/mostrador.js';
 import { renderLogin } from './pages/login.js';
 import { renderTiendaCliente } from './pages/tiendaCliente.js';
 import { renderSuperAdmin } from './pages/superAdmin.js';
@@ -15,6 +16,7 @@ registerRoute('/mi-tienda', renderTienda);
 registerRoute('/pedidos', renderPedidos);
 registerRoute('/menu', renderMenu);
 registerRoute('/inventario', renderInventario);
+registerRoute('/mostrador', renderMostrador);
 registerRoute('/tienda/:slug', renderTiendaCliente);
 registerRoute('/superadmin', renderSuperAdmin);
 

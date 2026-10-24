@@ -1,5 +1,7 @@
 # Costos e inventario por tienda (23 de octubre de 2026)
 
+La etapa posterior de ventas presenciales se documenta en [venta-mostrador.md](venta-mostrador.md). Reutiliza el costo histórico y el resumen de esta etapa sin descontar consumibles.
+
 Esta etapa sirve a cualquier tienda. No crea Pinyex ni carga productos reales.
 Se conserva el descuento de unidades al **crear** un pedido; funciona como
 separación de mercancía. Confirmar o entregar no descuenta de nuevo. Cancelar

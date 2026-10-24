@@ -27,6 +27,7 @@ async function request(url, options = {}) {
       'fuera_de_atencion', 'fecha_invalida', 'horario_no_disponible',
       'producto_fecha_incompatible', 'producto_modalidad_incompatible', 'producto_entrega_incompatible', 'entrega_producto_invalida', 'transicion_invalida', 'horario_invalido', 'fechas_invalidas'];
     safeCodes.push('direccion_entrega_invalida');
+    safeCodes.push('clave_invalida', 'pago_invalido', 'nota_invalida', 'inventario_no_permitido', 'idempotencia_conflicto', 'registro_ocupado', 'acceso_denegado', 'precio_actualizado', 'precio_invalido', 'importe_invalido');
     const message = response.status < 500 && safeCodes.includes(payload?.code)
       ? payload.message : 'No se pudo completar la operación. Revisa los datos e intenta de nuevo.';
     const error = new Error(message);
@@ -56,6 +57,7 @@ export const api = {
     delete: (id) => request(`/tiendas/mi-tienda/productos/${id}`, { method: 'DELETE' })
   },
   pedidos: {
+    registrarMostrador: (data) => request('/pedidos/mi-tienda/mostrador', { method: 'POST', body: JSON.stringify(data) }),
     resumen: (desde, hasta) => request(`/pedidos/mi-tienda/resumen?${new URLSearchParams({ desde, hasta })}`),
     getMisPedidos: (estado, fechaServicio) => {
       const params = new URLSearchParams();

@@ -132,12 +132,14 @@ async function loadPedidos(container, estado, fechaServicio = '') {
         <div class="flex justify-between items-start mb-3">
           <div class="flex items-center gap-2">
             <span class="font-bold text-primary text-[0.9375rem]">#${p.id}</span>
+            ${p.origen === 'Mostrador' ? '<span class="badge badge-accent">Mostrador</span>' : ''}
             ${p.clienteNombre ? `<span class="text-text-secondary text-sm">${p.clienteNombre}</span>` : ''}
           </div>
           <span class="badge ${ESTADO_BADGE[p.estado] || 'badge-info'}">${p.estado}</span>
         </div>
         <div class="flex flex-wrap gap-1.5 mb-3">
-          <p class="text-sm text-primary w-full">${p.fechaServicio ? `Servicio ${p.fechaServicio} · ${p.modalidad === 'Programado' ? 'Programado' : 'Al momento'} · ${p.entrega === 'Domicilio' ? 'Domicilio' : 'Recoger'}` : 'Pedido anterior sin fecha de servicio registrada'}</p>
+          <p class="text-sm text-primary w-full">${p.origen === 'Mostrador' ? 'Venta de mostrador' : p.fechaServicio ? `Servicio ${p.fechaServicio} · ${p.modalidad === 'Programado' ? 'Programado' : 'Al momento'} · ${p.entrega === 'Domicilio' ? 'Domicilio' : 'Recoger'}` : 'Pedido anterior sin fecha de servicio registrada'}</p>
+          ${p.origen === 'Mostrador' ? '<p class="text-sm text-primary w-full">Venta presencial entregada y cobrada</p>' : ''}
           ${p.ventanaSolicitada ? `<p class="text-sm text-text-secondary w-full">Solicitado: ${p.ventanaSolicitada}</p>` : ''}
           ${p.direccionEntrega ? `<p class="text-sm text-text-secondary w-full">Dirección: ${escapeHtml(p.direccionEntrega)}</p>` : ''}
           ${p.horarioConfirmado ? `<p class="text-sm text-primary w-full">Confirmado o estimado: ${escapeHtml(p.horarioConfirmado)}</p>` : ''}

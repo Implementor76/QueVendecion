@@ -32,9 +32,11 @@ await using (var db = new QueVendecionDbContext(dbOptions))
     await InventarioSchemaUpgrade.AplicarAsync(db);
     await OperacionSchemaUpgrade.AplicarAsync(db);
     await CostosSchemaUpgrade.AplicarAsync(db);
+    await MostradorSchemaUpgrade.AplicarAsync(db);
     await InventarioSchemaUpgrade.VerificarAsync(db);
     await OperacionSchemaUpgrade.VerificarAsync(db);
     await CostosSchemaUpgrade.VerificarAsync(db);
+    await MostradorSchemaUpgrade.VerificarAsync(db);
 }
 
 await destinationConnection.OpenAsync();
@@ -83,9 +85,9 @@ static async Task<List<string>> BusinessValues(SqliteConnection connection, bool
     var result = new List<string>();
     foreach (var (table, columns) in new[]
     {
-        ("Productos", includeStock ? new[] { "Id", "Precio", "Stock" } : new[] { "Id", "Precio" }),
-        ("Pedidos", new[] { "Id", "Total", "Estado" }),
-        ("ItemsPedido", new[] { "Id", "PrecioUnitario", "Cantidad" })
+        ("Productos", includeStock ? new[] { "Id", "Precio", "CostoUnitario", "Stock" } : new[] { "Id", "Precio", "CostoUnitario" }),
+        ("Pedidos", new[] { "Id", "Total", "Estado", "EstadoPago", "ClienteId", "Origen", "EntregadoEnUtc" }),
+        ("ItemsPedido", new[] { "Id", "PrecioUnitario", "CostoUnitarioHistorico", "Cantidad" })
     })
     {
         var available = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

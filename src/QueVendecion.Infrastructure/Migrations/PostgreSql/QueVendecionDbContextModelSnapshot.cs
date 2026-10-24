@@ -141,12 +141,19 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.Property<DateTime?>("ActualizadoEn")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ClaveIdempotencia")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
                     b.Property<int?>("ClienteId")
                         .HasColumnType("integer");
 
                     b.Property<string>("ClienteNombre")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("CobradoPorUsuarioId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreadoEn")
                         .HasColumnType("timestamp with time zone");
@@ -180,12 +187,22 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("HuellaSolicitud")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int?>("Modalidad")
                         .HasColumnType("integer");
 
                     b.Property<string>("Observaciones")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Origen")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PagadoEnUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("TiendaId")
                         .HasColumnType("integer");
@@ -200,6 +217,9 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
+
+                    b.HasIndex("TiendaId", "ClaveIdempotencia")
+                        .IsUnique();
 
                     b.HasIndex("TiendaId", "EntregadoEnUtc");
 

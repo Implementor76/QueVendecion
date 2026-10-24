@@ -93,6 +93,16 @@ using (var scope = app.Services.CreateScope())
         await CostosSchemaUpgrade.AplicarAsync(db);
         return;
     }
+    if (args.Contains("--upgrade-mostrador"))
+    {
+        if (!app.Environment.IsDevelopment() || !db.Database.IsSqlite())
+            throw new InvalidOperationException("--upgrade-mostrador solo está permitido con SQLite en Development.");
+        await InventarioSchemaUpgrade.AplicarAsync(db);
+        await OperacionSchemaUpgrade.AplicarAsync(db);
+        await CostosSchemaUpgrade.AplicarAsync(db);
+        await MostradorSchemaUpgrade.AplicarAsync(db);
+        return;
+    }
     if (args.Contains("--upgrade-costos"))
     {
         if (!app.Environment.IsDevelopment() || !db.Database.IsSqlite())
@@ -109,6 +119,7 @@ using (var scope = app.Services.CreateScope())
         await InventarioSchemaUpgrade.AplicarAsync(db);
         await OperacionSchemaUpgrade.AplicarAsync(db);
         await CostosSchemaUpgrade.AplicarAsync(db);
+        await MostradorSchemaUpgrade.AplicarAsync(db);
     }
     else
     {
@@ -117,6 +128,7 @@ using (var scope = app.Services.CreateScope())
         await InventarioSchemaUpgrade.VerificarAsync(db);
         await OperacionSchemaUpgrade.VerificarAsync(db);
         await CostosSchemaUpgrade.VerificarAsync(db);
+        await MostradorSchemaUpgrade.VerificarAsync(db);
     }
 
     if (!db.UsuariosTienda.Any(u => u.Rol == RolUsuario.SuperAdmin))

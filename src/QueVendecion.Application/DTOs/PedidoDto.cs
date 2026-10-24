@@ -11,6 +11,9 @@ public class PedidoDto
     public EstadoPedido Estado { get; set; }
     public FormaPago FormaPago { get; set; }
     public EstadoPago EstadoPago { get; set; }
+    public OrigenPedido Origen { get; set; }
+    public DateTime? PagadoEnUtc { get; set; }
+    public int? CobradoPorUsuarioId { get; set; }
     public decimal Total { get; set; }
     public string? Observaciones { get; set; }
     public DateTime CreadoEn { get; set; }
@@ -55,6 +58,16 @@ public class CrearItemPedidoDto
 {
     public int ProductoId { get; set; }
     public int Cantidad { get; set; }
+}
+
+public class RegistrarVentaMostradorDto
+{
+    public Guid ClaveIdempotencia { get; set; }
+    public int ProductoId { get; set; }
+    public int Cantidad { get; set; }
+    public decimal PrecioEsperado { get; set; }
+    public FormaPago FormaPago { get; set; }
+    public string? Nota { get; set; }
 }
 
 public class ActualizarEstadoPedidoDto

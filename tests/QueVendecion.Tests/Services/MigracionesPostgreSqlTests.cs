@@ -16,6 +16,7 @@ public class MigracionesPostgreSqlTests
     private const string Direccion = "20261022055059_AgregarDireccionEntrega";
     private const string EntregaEstados = "20261022060414_AsignarEntregaYRegistrarEstados";
     private const string Costos = "20261023064705_AgregarCostosYResumen";
+    private const string Mostrador = "20261024162911_AgregarVentaMostrador";
 
     private static QueVendecionDbContext Create() => new(new DbContextOptionsBuilder<QueVendecionDbContext>()
         .UseNpgsql("Host=localhost;Database=design_only;Username=design_only").Options);
@@ -46,7 +47,7 @@ public class MigracionesPostgreSqlTests
     {
         using var db = Create();
         Assert.False(db.Database.HasPendingModelChanges());
-        Assert.Equal(new[] { Baseline, Inventario, Operacion, Direccion, EntregaEstados, Costos }, db.Database.GetMigrations());
+        Assert.Equal(new[] { Baseline, Inventario, Operacion, Direccion, EntregaEstados, Costos, Mostrador }, db.Database.GetMigrations());
     }
 
     [Fact]
@@ -95,6 +96,23 @@ public class MigracionesPostgreSqlTests
     }
 
     [Fact]
+    public void MostradorSoloAgregaColumnasEIndiceUnico()
+    {
+        var migration = new AgregarVentaMostrador { ActiveProvider = Provider };
+        Assert.All(migration.UpOperations, op => Assert.True(op is AddColumnOperation or CreateIndexOperation));
+        Assert.Equal(5, migration.UpOperations.OfType<AddColumnOperation>().Count());
+        var origen = Assert.Single(migration.UpOperations.OfType<AddColumnOperation>(), c => c.Name == "Origen");
+        Assert.Equal(0, origen.DefaultValue);
+        Assert.False(origen.IsNullable);
+        Assert.True(Assert.Single(migration.UpOperations.OfType<CreateIndexOperation>()).IsUnique);
+        using var db = Create();
+        var sql = db.GetService<IMigrator>().GenerateScript(Costos, Mostrador, MigrationsSqlGenerationOptions.Idempotent);
+        Assert.Contains("ClaveIdempotencia", sql);
+        Assert.DoesNotContain("DROP TABLE", sql);
+        Assert.DoesNotContain("DELETE FROM", sql);
+    }
+
+    [Fact]
     public void MigracionesRechazanSqliteYRollbackDestructivo()
     {
         Assert.Throws<NotSupportedException>(() => new AgregarInventario { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
@@ -103,5 +121,7 @@ public class MigracionesPostgreSqlTests
         Assert.Throws<NotSupportedException>(() => new EsquemaAnteriorInventario { ActiveProvider = Provider }.DownOperations);
         Assert.Throws<NotSupportedException>(() => new AgregarCostosYResumen { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
         Assert.Throws<NotSupportedException>(() => new AgregarCostosYResumen { ActiveProvider = Provider }.DownOperations);
+        Assert.Throws<NotSupportedException>(() => new AgregarVentaMostrador { ActiveProvider = "Microsoft.EntityFrameworkCore.Sqlite" }.UpOperations);
+        Assert.Throws<NotSupportedException>(() => new AgregarVentaMostrador { ActiveProvider = Provider }.DownOperations);
     }
 }

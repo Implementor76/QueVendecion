@@ -21,6 +21,15 @@ public class PedidosController : ControllerBase
 
     private int GetTiendaId() => int.Parse(User.FindFirst("TiendaId")?.Value ?? "0");
 
+    [HttpPost("mi-tienda/mostrador")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<PedidoDto>> RegistrarMostrador([FromBody] RegistrarVentaMostradorDto dto)
+    {
+        var usuarioId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var venta = await _pedidoService.RegistrarMostradorAsync(GetTiendaId(), usuarioId, dto);
+        return Ok(venta);
+    }
+
     [HttpGet("mi-tienda/resumen")]
     public async Task<ActionResult<ResumenVentasDto>> Resumen([FromQuery] DateOnly desde, [FromQuery] DateOnly hasta) =>
         await _pedidoService.ResumenVentasAsync(GetTiendaId(), desde, hasta);

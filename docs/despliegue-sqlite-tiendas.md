@@ -1,5 +1,7 @@
 # Preparación de despliegue con SQLite existente
 
+La ampliación posterior de mostrador y su ensayo SQLite se describen en [venta-mostrador.md](venta-mostrador.md). La herramienta de actualización ahora también aplica ese esquema aditivo; se mantienen las precauciones de respaldo consistente, WAL y preservación de configuración indicadas aquí.
+
 **Etapa posterior:** el procedimiento y ensayo de costos e inventario está en
 [costos-inventario.md](costos-inventario.md). La publicación de operación y
 corrección de horas ya se realizó; costos e inventario aún no se publican.

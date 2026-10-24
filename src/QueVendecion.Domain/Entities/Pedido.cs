@@ -11,6 +11,11 @@ public class Pedido
     public EstadoPedido Estado { get; set; } = EstadoPedido.Recibido;
     public FormaPago FormaPago { get; set; }
     public EstadoPago EstadoPago { get; set; } = EstadoPago.Pendiente;
+    public OrigenPedido Origen { get; set; } = OrigenPedido.Web;
+    public string? ClaveIdempotencia { get; set; }
+    public string? HuellaSolicitud { get; set; }
+    public DateTime? PagadoEnUtc { get; set; }
+    public int? CobradoPorUsuarioId { get; set; }
     public decimal Total { get; set; }
     public string? Observaciones { get; set; }
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;

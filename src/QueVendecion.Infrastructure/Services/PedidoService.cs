@@ -1,5 +1,7 @@
 using System.Data;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using QueVendecion.Application.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using QueVendecion.Application.DTOs;
@@ -82,7 +84,7 @@ public class PedidoService : IPedidoService
         var pedidos = await _context.Pedidos
             .Include(p => p.Items)
             .ThenInclude(i => i.Producto)
-            .Where(p => p.TiendaId == tiendaId && p.ClienteId == clienteId)
+            .Where(p => p.TiendaId == tiendaId && p.ClienteId == clienteId && p.Origen == OrigenPedido.Web)
             .OrderByDescending(p => p.CreadoEn)
             .ToListAsync();
 
@@ -100,6 +102,97 @@ public class PedidoService : IPedidoService
     }
 
     public Task<PedidoDto> CrearAsync(CrearPedidoDto dto) => EnTransaccionAsync(() => CrearInternoAsync(dto));
+
+    public async Task<PedidoDto> RegistrarMostradorAsync(int tiendaId, int usuarioId, RegistrarVentaMostradorDto dto)
+    {
+        if (tiendaId <= 0 || usuarioId <= 0)
+            throw new ReglaNegocioException("acceso_denegado", "No se identificó la tienda o el administrador.");
+        if (dto.ClaveIdempotencia == Guid.Empty)
+            throw new ReglaNegocioException("clave_invalida", "La clave de registro no es válida.");
+        if (dto.Cantidad <= 0 || dto.ProductoId <= 0)
+            throw new ReglaNegocioException("cantidad_invalida", "Selecciona un servicio y una cantidad entera mayor a cero.");
+        if (dto.PrecioEsperado < 0)
+            throw new ReglaNegocioException("precio_invalido", "El servicio tiene un precio inválido.");
+        if (dto.FormaPago is not (FormaPago.Efectivo or FormaPago.Transferencia))
+            throw new ReglaNegocioException("pago_invalido", "Selecciona efectivo o transferencia.");
+        var nota = string.IsNullOrWhiteSpace(dto.Nota) ? null : dto.Nota.Trim();
+        if (nota?.Length > 500)
+            throw new ReglaNegocioException("nota_invalida", "La nota debe tener 500 caracteres o menos.");
+        var clave = dto.ClaveIdempotencia.ToString("D");
+        var huella = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { dto.ProductoId, dto.Cantidad, dto.PrecioEsperado, dto.FormaPago, Nota = nota }))));
+
+        // The unique index and the transaction commit together decide the winning request.
+        // After a concurrent insert or transient SQLite lock, read the committed winner.
+        for (var intento = 0; intento < 5; intento++)
+        {
+            try
+            {
+                return await EnTransaccionAsync(async () =>
+                {
+                    var anterior = await _context.Pedidos.Include(p => p.Items).ThenInclude(i => i.Producto)
+                        .FirstOrDefaultAsync(p => p.TiendaId == tiendaId && p.ClaveIdempotencia == clave);
+                    if (anterior != null)
+                    {
+                        if (anterior.HuellaSolicitud != huella)
+                            throw new ReglaNegocioException("idempotencia_conflicto", "Esta clave ya registró una venta distinta.");
+                        return MapToDto(anterior);
+                    }
+                    var producto = await _context.Productos.AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.Id == dto.ProductoId && p.TiendaId == tiendaId);
+                    if (producto == null || !producto.Disponible)
+                        throw new ReglaNegocioException("producto_no_disponible", "El servicio no está disponible en tu tienda.");
+                    if (producto.TieneInventario)
+                        throw new ReglaNegocioException("inventario_no_permitido", "Esta versión solo admite servicios sin control de existencias.");
+                    if (producto.Precio < 0)
+                        throw new ReglaNegocioException("precio_invalido", "El servicio tiene un precio inválido.");
+                    if (producto.Precio != dto.PrecioEsperado)
+                        throw new ReglaNegocioException("precio_actualizado", "El precio cambió. Revisa el importe actualizado antes de cobrar.");
+                    decimal total;
+                    try { total = checked(producto.Precio * dto.Cantidad); }
+                    catch (OverflowException) { throw new ReglaNegocioException("importe_invalido", "El importe excede el máximo permitido."); }
+                    if (total > 9999999999999999.99m)
+                        throw new ReglaNegocioException("importe_invalido", "El importe excede el máximo permitido.");
+                    var ahora = DateTime.UtcNow;
+                    var pedido = new Pedido
+                    {
+                        TiendaId = tiendaId,
+                        Origen = OrigenPedido.Mostrador,
+                        ClaveIdempotencia = clave,
+                        HuellaSolicitud = huella,
+                        Estado = EstadoPedido.Entregado,
+                        EstadoPago = EstadoPago.Pagado,
+                        FormaPago = dto.FormaPago,
+                        Observaciones = nota,
+                        CreadoEn = ahora,
+                        EntregadoEnUtc = ahora,
+                        PagadoEnUtc = ahora,
+                        CobradoPorUsuarioId = usuarioId,
+                        Total = total,
+                        HistorialEstadosJson = JsonSerializer.Serialize(new[] { new CambioEstadoPedidoDto
+                            { Anterior = null, Nuevo = EstadoPedido.Entregado, FechaUtc = ahora, UsuarioId = usuarioId } }),
+                        Items = new List<ItemPedido> { new()
+                            { ProductoId = producto.Id, Cantidad = dto.Cantidad, PrecioUnitario = producto.Precio,
+                                CostoUnitarioHistorico = producto.CostoUnitario } }
+                    };
+                    _context.Pedidos.Add(pedido);
+                    await _context.SaveChangesAsync();
+                    return MapToDto(pedido);
+                });
+            }
+            catch (Exception ex) when (intento < 4 && EsConflictoConcurrente(ex))
+            {
+                _context.ChangeTracker.Clear();
+                await Task.Delay(30 * (intento + 1));
+            }
+        }
+        throw new ReglaNegocioException("registro_ocupado", "No se pudo confirmar la venta. Reintenta con la misma clave.");
+    }
+
+    private static bool EsConflictoConcurrente(Exception ex) =>
+        ex is Microsoft.Data.Sqlite.SqliteException sqlite && sqlite.SqliteErrorCode is 5 or 6 or 19 ||
+        ex is Npgsql.PostgresException pg && pg.SqlState is "23505" or "40001" ||
+        ex.InnerException != null && EsConflictoConcurrente(ex.InnerException);
 
     private async Task<PedidoDto> CrearInternoAsync(CrearPedidoDto dto)
     {
@@ -270,6 +363,8 @@ public class PedidoService : IPedidoService
     {
         var pedido = await _context.Pedidos.FindAsync(id);
         if (pedido == null) return null;
+        if (pedido.Origen == OrigenPedido.Mostrador && estadoPago != EstadoPago.Pagado)
+            throw new ReglaNegocioException("pago_invalido", "Una venta de mostrador cobrada no puede quedar pendiente.");
 
         pedido.EstadoPago = estadoPago;
         pedido.ActualizadoEn = DateTime.UtcNow;
@@ -328,6 +423,9 @@ public class PedidoService : IPedidoService
         Estado = p.Estado,
         FormaPago = p.FormaPago,
         EstadoPago = p.EstadoPago,
+        Origen = p.Origen,
+        PagadoEnUtc = p.PagadoEnUtc.HasValue ? ComoUtc(p.PagadoEnUtc.Value) : null,
+        CobradoPorUsuarioId = p.CobradoPorUsuarioId,
         Total = p.Total,
         Observaciones = p.Observaciones,
         CreadoEn = ComoUtc(p.CreadoEn),
