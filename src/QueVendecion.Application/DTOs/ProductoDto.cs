@@ -15,6 +15,8 @@ public class ProductoDto
     public int? Stock { get; set; }
     public bool ConsumePapel { get; set; }
     public bool AdmiteDobleCara { get; set; }
+    public bool RequierePdf { get; set; }
+    public string? RevisionImpresion { get; set; }
     public List<DateOnly> FechasServicio { get; set; } = new();
     public EntregaProducto? EntregaPermitida { get; set; }
 }
@@ -32,6 +34,7 @@ public class CrearProductoDto
     public int? ExistenciaMinima { get; set; }
     public int? PapelInsumoId { get; set; }
     public bool AdmiteDobleCara { get; set; }
+    public bool RequierePdf { get; set; }
     public List<DateOnly> FechasServicio { get; set; } = new();
     public EntregaProducto? EntregaPermitida { get; set; } = EntregaProducto.Ambas;
 }

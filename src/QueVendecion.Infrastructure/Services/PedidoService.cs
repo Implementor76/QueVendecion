@@ -15,10 +15,12 @@ namespace QueVendecion.Infrastructure.Services;
 public class PedidoService : IPedidoService
 {
     private readonly QueVendecionDbContext _context;
+    private readonly DocumentoService? _documentos;
 
-    public PedidoService(QueVendecionDbContext context)
+    public PedidoService(QueVendecionDbContext context, DocumentoService? documentos = null)
     {
         _context = context;
+        _documentos = documentos;
     }
 
     public async Task<ResumenVentasDto> ResumenVentasAsync(int tiendaId, DateOnly desde, DateOnly hasta)
@@ -64,6 +66,7 @@ public class PedidoService : IPedidoService
         var query = _context.Pedidos
             .Include(p => p.Items)
             .ThenInclude(i => i.Producto)
+            .Include(p => p.Items).ThenInclude(i => i.DocumentoPdf)
             .Where(p => p.TiendaId == tiendaId)
             .AsQueryable();
 
@@ -79,12 +82,14 @@ public class PedidoService : IPedidoService
         return pedidos.Select(MapToDto).ToList();
     }
 
-    public async Task<List<PedidoDto>> ObtenerPorClienteAsync(int tiendaId, int clienteId)
+    public async Task<List<PedidoDto>> ObtenerPorClienteAsync(int tiendaId, int clienteId, string? sesionDocumentoHash = null)
     {
         var pedidos = await _context.Pedidos
             .Include(p => p.Items)
             .ThenInclude(i => i.Producto)
-            .Where(p => p.TiendaId == tiendaId && p.ClienteId == clienteId && p.Origen == OrigenPedido.Web)
+            .Include(p => p.Items).ThenInclude(i => i.DocumentoPdf)
+            .Where(p => p.TiendaId == tiendaId && p.ClienteId == clienteId && p.Origen == OrigenPedido.Web &&
+                p.Items.All(i => i.DocumentoPdf == null || i.DocumentoPdf.SesionHash == sesionDocumentoHash))
             .OrderByDescending(p => p.CreadoEn)
             .ToListAsync();
 
@@ -96,12 +101,49 @@ public class PedidoService : IPedidoService
         var pedido = await _context.Pedidos
             .Include(p => p.Items)
             .ThenInclude(i => i.Producto)
+            .Include(p => p.Items).ThenInclude(i => i.DocumentoPdf)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         return pedido == null ? null : MapToDto(pedido);
     }
 
-    public Task<PedidoDto> CrearAsync(CrearPedidoDto dto) => EnTransaccionAsync(() => CrearInternoAsync(dto));
+    public async Task<PedidoDto> CrearAsync(CrearPedidoDto dto)
+    {
+        if (dto.ClaveIdempotencia == Guid.Empty)
+            throw new ReglaNegocioException("clave_invalida", "La clave del pedido no es válida.");
+        var huella = dto.ClaveIdempotencia.HasValue ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { dto.TiendaId, dto.ClienteId, dto.SesionDocumentoHash, dto.Items,
+                dto.FormaPago, dto.Observaciones, dto.Modalidad, dto.Entrega, dto.DireccionEntrega,
+                dto.FechaServicio, dto.VentanaSolicitada, dto.TotalEsperado })))) : null;
+        for (var intento = 0; intento < 5; intento++)
+        {
+            try
+            {
+                return await EnTransaccionAsync(async () =>
+                {
+                    if (dto.ClaveIdempotencia.HasValue)
+                    {
+                        var previo = await _context.Pedidos.Include(p => p.Items).ThenInclude(i => i.Producto)
+                            .Include(p => p.Items).ThenInclude(i => i.DocumentoPdf)
+                            .FirstOrDefaultAsync(p => p.TiendaId == dto.TiendaId && p.ClaveIdempotencia == dto.ClaveIdempotencia.Value.ToString("D"));
+                        if (previo != null)
+                        {
+                            if (previo.HuellaSolicitud != huella || previo.ClienteId != dto.ClienteId)
+                                throw new ReglaNegocioException("idempotencia_conflicto", "Esta clave corresponde a otro pedido.");
+                            return MapToDto(previo);
+                        }
+                    }
+                    return await CrearInternoAsync(dto, huella);
+                });
+            }
+            catch (Exception ex) when (dto.ClaveIdempotencia.HasValue && intento < 4 && EsConflictoConcurrente(ex))
+            {
+                _context.ChangeTracker.Clear();
+                await Task.Delay(30 * (intento + 1));
+            }
+        }
+        throw new ReglaNegocioException("registro_ocupado", "No se pudo confirmar el pedido. Reintenta con la misma clave.");
+    }
 
     public async Task<PedidoDto> RegistrarMostradorAsync(int tiendaId, int usuarioId, RegistrarVentaMostradorDto dto)
     {
@@ -150,6 +192,8 @@ public class PedidoService : IPedidoService
                         .FirstOrDefaultAsync(p => p.Id == dto.ProductoId && p.TiendaId == tiendaId);
                     if (producto == null || !producto.Disponible)
                         throw new ReglaNegocioException("producto_no_disponible", "El servicio no está disponible en tu tienda.");
+                    if (producto.RequierePdf)
+                        throw new ReglaNegocioException("pdf_requerido", "Este servicio requiere un PDF y se solicita desde el catálogo del cliente.");
                     if (producto.PapelInsumoId != dto.PapelInsumoIdEsperado || producto.AdmiteDobleCara != dto.AdmiteDobleCaraEsperado)
                         throw new ReglaNegocioException("papel_configuracion_cambio", "Cambió la configuración del servicio. Revisa el consumo antes de cobrar.");
                     PapelCalculo? papel = null;
@@ -218,9 +262,9 @@ public class PedidoService : IPedidoService
         ex is Npgsql.PostgresException pg && pg.SqlState is "23505" or "40001" ||
         ex.InnerException != null && EsConflictoConcurrente(ex.InnerException);
 
-    private async Task<PedidoDto> CrearInternoAsync(CrearPedidoDto dto)
+    private async Task<PedidoDto> CrearInternoAsync(CrearPedidoDto dto, string? huella)
     {
-        if (dto.Items == null || dto.Items.Count == 0 || dto.Items.Any(i => i.Cantidad <= 0))
+        if (dto.Items == null || dto.Items.Count == 0 || dto.Items.Any(i => i.Cantidad < 0))
             throw new ReglaNegocioException("cantidad_invalida", "Agrega productos con cantidades mayores a cero.");
         var tienda = await _context.Tiendas.FindAsync(dto.TiendaId)
             ?? throw new ReglaNegocioException("tienda_no_disponible", "La tienda no está disponible.");
@@ -237,17 +281,23 @@ public class PedidoService : IPedidoService
             DireccionEntrega = dto.Entrega == FormaEntrega.Domicilio ? dto.DireccionEntrega?.Trim() : null,
             VentanaSolicitada = dto.VentanaSolicitada
         };
+        if (dto.ClaveIdempotencia.HasValue)
+        {
+            pedido.ClaveIdempotencia = dto.ClaveIdempotencia.Value.ToString("D");
+            pedido.HuellaSolicitud = huella;
+        }
         pedido.HistorialEstadosJson = JsonSerializer.Serialize(new[] { new CambioEstadoPedidoDto
             { Anterior = null, Nuevo = EstadoPedido.Recibido, FechaUtc = pedido.CreadoEn } });
 
         var salidas = new List<(int ProductoId, int Cantidad, string Motivo)>();
         var productos = new List<Producto>();
+        var pdfs = new List<(DocumentoPdf Documento, ItemPedido Item)>();
 
-        foreach (var grupo in dto.Items.GroupBy(i => i.ProductoId).OrderBy(g => g.Key))
+        foreach (var grupo in dto.Items.GroupBy(i => (i.ProductoId, i.DocumentoPdfId)).OrderBy(g => g.Key.ProductoId))
         {
-            var producto = await _context.Productos.FindAsync(grupo.Key);
+            var producto = await _context.Productos.FindAsync(grupo.Key.ProductoId);
             if (producto == null)
-                throw new InvalidOperationException($"Producto {grupo.Key} no encontrado");
+                throw new InvalidOperationException($"Producto {grupo.Key.ProductoId} no encontrado");
 
             await _context.Entry(producto).ReloadAsync();
             if (producto.TiendaId != dto.TiendaId || !producto.Disponible)
@@ -256,8 +306,37 @@ public class PedidoService : IPedidoService
             PapelCalculo? papel = null;
             var itemDto = grupo.First();
             int cantidad;
-            if (producto.PapelInsumoId.HasValue)
+            DocumentoPdf? documento = null;
+            string? paginas = null;
+            if (producto.RequierePdf)
             {
+                if (_documentos == null || dto.Entrega != FormaEntrega.Recoleccion || dto.ClienteId == null ||
+                    string.IsNullOrWhiteSpace(dto.SesionDocumentoHash) || dto.ClaveIdempotencia == null ||
+                    dto.Items.Count(i => i.DocumentoPdfId.HasValue) > _documentos.MaxTrabajos ||
+                    grupo.Count() != 1 || itemDto.DocumentoPdfId == null || itemDto.CarasPorJuego != null ||
+                    itemDto.RevisionImpresion != producto.RevisionImpresion || itemDto.PrecioEsperado != producto.Precio)
+                    throw new ReglaNegocioException("pdf_configuracion_cambio", "Revisa el PDF, precio, recolección y opciones antes de enviar el pedido.");
+                // PostgreSQL bloquea la fila antes de mover el archivo; otra solicitud del
+                // mismo PDF espera y después observa su estado definitivo.
+                if (_context.Database.IsNpgsql())
+                    await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"DocumentosPdf\" WHERE \"Id\" = {itemDto.DocumentoPdfId.Value} FOR UPDATE");
+                documento = await _context.DocumentosPdf.FirstOrDefaultAsync(d => d.Id == itemDto.DocumentoPdfId);
+                if (documento == null || documento.TiendaId != dto.TiendaId || documento.ClienteId != dto.ClienteId ||
+                    documento.SesionHash != dto.SesionDocumentoHash || documento.Estado != "Temporal" ||
+                    documento.ExpiraEnUtc <= DateTime.UtcNow || !producto.PapelInsumoId.HasValue)
+                    throw new ReglaNegocioException("pdf_no_disponible", "El PDF no está disponible para este pedido. Vuelve a subirlo.");
+                await _documentos.ValidarParaPedidoAsync(documento);
+                var seleccion = PaginasPdf.Normalizar(itemDto.Paginas, documento.PaginasTotales);
+                paginas = seleccion.Normalizada;
+                papel = PapelReglas.Calcular(seleccion.Cantidad, itemDto.Juegos, itemDto.DobleCara, producto.AdmiteDobleCara);
+                cantidad = papel.Value.CarasCobradas;
+                if (itemDto.Cantidad != 0 && itemDto.Cantidad != cantidad)
+                    throw new ReglaNegocioException("pdf_paginas_invalidas", "Las caras enviadas no coinciden con las páginas seleccionadas.");
+            }
+            else if (producto.PapelInsumoId.HasValue)
+            {
+                if (itemDto.DocumentoPdfId.HasValue || itemDto.Paginas != null)
+                    throw new ReglaNegocioException("pdf_configuracion_cambio", "Este servicio no recibe archivos.");
                 if (grupo.Count() != 1)
                     throw new ReglaNegocioException("papel_cantidad_invalida", "Incluye una sola configuración por servicio.");
                 papel = PapelReglas.Calcular(itemDto.CarasPorJuego, itemDto.Juegos, itemDto.DobleCara, producto.AdmiteDobleCara);
@@ -267,6 +346,8 @@ public class PedidoService : IPedidoService
             }
             else
             {
+                if (itemDto.DocumentoPdfId.HasValue || itemDto.Paginas != null)
+                    throw new ReglaNegocioException("pdf_configuracion_cambio", "Este producto no recibe archivos.");
                 if (grupo.Any(i => i.CarasPorJuego.HasValue || i.Juegos.HasValue || i.DobleCara.HasValue))
                     throw new ReglaNegocioException("papel_configuracion_cambio", "Este producto no tiene consumo de papel configurado.");
                 var suma = grupo.Sum(i => (long)i.Cantidad);
@@ -281,11 +362,19 @@ public class PedidoService : IPedidoService
                 Cantidad = cantidad,
                 PrecioUnitario = producto.Precio,
                 CostoUnitarioHistorico = producto.CostoUnitario,
-                CarasPorJuego = itemDto.CarasPorJuego, Juegos = itemDto.Juegos, DobleCara = itemDto.DobleCara,
+                CarasPorJuego = producto.RequierePdf ? papel?.CarasCobradas / itemDto.Juegos : itemDto.CarasPorJuego,
+                Juegos = itemDto.Juegos, DobleCara = itemDto.DobleCara,
                 PapelInsumoIdHistorico = producto.PapelInsumoId, HojasConsumidas = papel?.HojasConsumidas
             };
 
             pedido.Items.Add(item);
+            if (documento != null)
+            {
+                if (pdfs.Any(p => p.Documento.Id == documento.Id))
+                    throw new ReglaNegocioException("pdf_repetido", "Un PDF solo puede incluirse una vez por pedido.");
+                documento.PaginasSeleccionadas = paginas;
+                pdfs.Add((documento, item));
+            }
             if (producto.TieneInventario) salidas.Add((producto.Id, cantidad, "Venta pedido"));
             if (papel.HasValue) salidas.Add((producto.PapelInsumoId!.Value, papel.Value.HojasConsumidas, "Papel para servicio de copias"));
         }
@@ -295,14 +384,33 @@ public class PedidoService : IPedidoService
             ? DateOnly.FromDateTime(OperacionReglas.AhoraLocal(operacion, DateTime.UtcNow))
             : dto.FechaServicio;
 
-        pedido.Total = pedido.Items.Sum(i => i.Subtotal);
+        try { pedido.Total = checked(pedido.Items.Sum(i => i.Subtotal)); }
+        catch (OverflowException) { throw new ReglaNegocioException("importe_invalido", "El pedido supera el importe permitido."); }
+        if (pdfs.Count > 0 && dto.TotalEsperado != pedido.Total)
+            throw new ReglaNegocioException("precio_actualizado", "Cambió el total. Revisa el pedido antes de enviarlo.");
 
         _context.Pedidos.Add(pedido);
         await _context.SaveChangesAsync();
 
         await ConsumirAsync(pedido.Id, dto.TiendaId, salidas, null);
 
-        await _context.SaveChangesAsync();
+        var finalizados = new List<DocumentoPdf>();
+        try
+        {
+            foreach (var (documento, item) in pdfs)
+            {
+                if (_documentos!.Finalizar(documento)) finalizados.Add(documento);
+                documento.ItemPedidoId = item.Id;
+                documento.Estado = "Asociado";
+                documento.ExpiraEnUtc = null;
+            }
+            await _context.SaveChangesAsync();
+        }
+        catch
+        {
+            foreach (var documento in finalizados) _documentos!.DeshacerFinalizacion(documento);
+            throw;
+        }
 
         return await ObtenerPorIdAsync(pedido.Id) ?? MapToDto(pedido);
     }
@@ -500,6 +608,11 @@ public class PedidoService : IPedidoService
             Subtotal = i.Subtotal,
             CarasPorJuego = i.CarasPorJuego, Juegos = i.Juegos, DobleCara = i.DobleCara,
             HojasConsumidas = i.HojasConsumidas
+            ,DocumentoPdfId = i.DocumentoPdf?.Id,
+            NombrePdf = i.DocumentoPdf?.NombreOriginal,
+            PaginasTotalesPdf = i.DocumentoPdf?.PaginasTotales,
+            PaginasSeleccionadas = i.DocumentoPdf?.PaginasSeleccionadas,
+            ArchivoPdfDisponible = i.DocumentoPdf?.Estado == "Asociado"
         }).ToList()
     };
 

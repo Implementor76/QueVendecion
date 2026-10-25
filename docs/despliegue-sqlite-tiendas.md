@@ -1,5 +1,7 @@
 # Preparación de despliegue con SQLite existente
 
+**Etapa posterior:** [impresión PDF](impresion-pdf.md) añade documentos privados que deben respaldarse y restaurarse coordinadamente con SQLite. Las instrucciones de esta página conservan el contexto histórico de despliegues anteriores.
+
 La ampliación posterior de mostrador y su ensayo SQLite se describen en [venta-mostrador.md](venta-mostrador.md). La herramienta de actualización ahora también aplica ese esquema aditivo; se mantienen las precauciones de respaldo consistente, WAL y preservación de configuración indicadas aquí.
 
 **Etapa posterior:** el procedimiento y ensayo de costos e inventario está en

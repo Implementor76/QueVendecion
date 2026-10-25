@@ -1,5 +1,7 @@
 # Venta de inventario en mostrador y papel para copias (24 de octubre de 2026)
 
+**Etapa posterior:** [impresión PDF con archivo adjunto](impresion-pdf.md). La descripción de pedidos web sin adjuntos que sigue corresponde al alcance de esta etapa de papel.
+
 ## Configuración y uso
 
 La función sirve a cualquier tienda. No reconoce productos por nombre o ID y no crea ni cambia registros existentes. Para Pinyex, el administrador puede dar de alta una hoja carta como producto con inventario, precio de venta de $1 y costo de referencia de $0.198 por hoja (paquete de 500 a $99). Las existencias iniciales se capturan al crear el producto; compras y ajustes posteriores pasan por **Inventario y ventas**. Para copias, crea o edita un producto **sin control de inventario**, con precio de $3 **por cara** y el costo completo estimado por cara. En **Menú → Editar producto**, activa **Este servicio consume papel**, elige la hoja inventariable de la misma tienda y decide si admite ambos lados. No hay un control «Disponible» visible en ese formulario: al editar se conserva el valor de disponibilidad que ya tenía el producto.

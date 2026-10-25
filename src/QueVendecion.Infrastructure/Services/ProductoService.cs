@@ -65,6 +65,8 @@ public class ProductoService : IProductoService
             ExistenciaMinima = dto.TieneInventario ? dto.ExistenciaMinima : null,
             PapelInsumoId = dto.PapelInsumoId,
             AdmiteDobleCara = dto.AdmiteDobleCara,
+            RequierePdf = dto.RequierePdf,
+            RevisionImpresion = dto.RequierePdf ? Guid.NewGuid().ToString("N") : null,
             FechasServicioJson = dto.FechasServicio.Count == 0 ? null : JsonSerializer.Serialize(dto.FechasServicio.Distinct().Order()),
             EntregaPermitida = dto.EntregaPermitida
         };
@@ -113,6 +115,8 @@ public class ProductoService : IProductoService
         producto.ExistenciaMinima = dto.TieneInventario ? dto.ExistenciaMinima : null;
         producto.PapelInsumoId = dto.PapelInsumoId;
         producto.AdmiteDobleCara = dto.AdmiteDobleCara;
+        producto.RequierePdf = dto.RequierePdf;
+        producto.RevisionImpresion = dto.RequierePdf ? Guid.NewGuid().ToString("N") : null;
         producto.FechasServicioJson = dto.FechasServicio.Count == 0 ? null : JsonSerializer.Serialize(dto.FechasServicio.Distinct().Order());
         producto.EntregaPermitida = dto.EntregaPermitida;
 
@@ -213,6 +217,12 @@ public class ProductoService : IProductoService
 
     private async Task ValidarPapelAsync(int tiendaId, int? servicioId, CrearProductoDto dto)
     {
+        if (dto.RequierePdf && (dto.TieneInventario || dto.PapelInsumoId == null ||
+            dto.EntregaPermitida is not (QueVendecion.Domain.Enums.EntregaProducto.Recoleccion or QueVendecion.Domain.Enums.EntregaProducto.Ambas)))
+            throw new ReglaNegocioException("pdf_configuracion_invalida", "La impresión PDF requiere papel vinculado, sin inventario propio y recolección disponible.");
+        if (dto.RequierePdf && !OperacionReglas.Leer(await _context.Tiendas.FindAsync(tiendaId)
+            ?? throw new ReglaNegocioException("tienda_no_disponible", "Tienda no encontrada.")).Recoleccion)
+            throw new ReglaNegocioException("pdf_configuracion_invalida", "Habilita la recolección de la tienda antes de ofrecer impresiones PDF.");
         if (dto.PapelInsumoId == null)
         {
             if (dto.AdmiteDobleCara)
@@ -265,6 +275,8 @@ public class ProductoService : IProductoService
         Stock = p.Stock,
         ConsumePapel = p.PapelInsumoId.HasValue,
         AdmiteDobleCara = p.AdmiteDobleCara,
+        RequierePdf = p.RequierePdf,
+        RevisionImpresion = p.RequierePdf ? p.RevisionImpresion : null,
         FechasServicio = OperacionReglas.LeerFechas(p),
         EntregaPermitida = p.EntregaPermitida
     };
@@ -274,7 +286,8 @@ public class ProductoService : IProductoService
         Id = p.Id, TiendaId = p.TiendaId, Nombre = p.Nombre, Descripcion = p.Descripcion,
         Precio = p.Precio, Disponible = p.Disponible, ImagenUrl = p.ImagenUrl,
         TieneInventario = p.TieneInventario, Stock = p.Stock,
-        ConsumePapel = p.PapelInsumoId.HasValue, AdmiteDobleCara = p.AdmiteDobleCara,
+        ConsumePapel = p.PapelInsumoId.HasValue, AdmiteDobleCara = p.AdmiteDobleCara, RequierePdf = p.RequierePdf,
+        RevisionImpresion = p.RevisionImpresion,
         FechasServicio = OperacionReglas.LeerFechas(p), EntregaPermitida = p.EntregaPermitida,
         CostoUnitario = p.CostoUnitario, ExistenciaMinima = p.ExistenciaMinima, PapelInsumoId = p.PapelInsumoId
     };

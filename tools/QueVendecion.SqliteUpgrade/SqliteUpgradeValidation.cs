@@ -9,10 +9,11 @@ internal static class SqliteUpgradeValidation
 {
     private static readonly string[] Tablas =
     {
-        "Tiendas", "UsuariosTienda", "Clientes", "Productos", "Pedidos", "ItemsPedido", "MovimientosInventario"
+        "Tiendas", "UsuariosTienda", "Clientes", "Productos", "Pedidos", "ItemsPedido", "MovimientosInventario",
+        "DocumentosPdf", "SesionesDocumento"
     };
 
-    internal sealed record TablaAnterior(string[] Columnas, Dictionary<long, Dictionary<string, string>> Filas);
+    internal sealed record TablaAnterior(string[] Columnas, Dictionary<string, Dictionary<string, string>> Filas);
     internal sealed record Instantanea(Dictionary<string, TablaAnterior> Tablas)
     {
         public IEnumerable<string> Conteos => Tablas.Select(t => $"{t.Key}={t.Value.Filas.Count}");
@@ -26,7 +27,7 @@ internal static class SqliteUpgradeValidation
             var columnas = await ColumnasAsync(conexion, tabla);
             if (columnas.Length == 0)
             {
-                if (tabla == "MovimientosInventario") continue; // Legacy inventory bridge creates it.
+                if (tabla is "MovimientosInventario" or "DocumentosPdf" or "SesionesDocumento") continue;
                 throw new InvalidOperationException($"Falta la tabla necesaria {tabla} en el origen.");
             }
             if (!columnas.Contains("Id", StringComparer.OrdinalIgnoreCase))
@@ -73,12 +74,23 @@ internal static class SqliteUpgradeValidation
                 throw new InvalidOperationException("La tabla nueva MovimientosInventario no está vacía.");
         }
 
+        foreach (var tabla in new[] { "DocumentosPdf", "SesionesDocumento" })
+        {
+            if (anterior.Tablas.ContainsKey(tabla)) continue;
+            if ((await ColumnasAsync(conexion, tabla)).Length == 0)
+                throw new InvalidOperationException($"No se creó {tabla}.");
+            await using var vacia = conexion.CreateCommand();
+            vacia.CommandText = $"SELECT COUNT(*) FROM {Identificador(tabla)}";
+            if ((long)(await vacia.ExecuteScalarAsync() ?? -1L) != 0)
+                throw new InvalidOperationException($"La tabla nueva {tabla} no está vacía.");
+        }
+
         await VerificarIndiceMostradorAsync(conexion);
     }
 
     private static async Task VerificarColumnaNuevaAsync(SqliteConnection conexion, string tabla, string columna)
     {
-        var cero = tabla == "Productos" && columna is "TieneInventario" or "AdmiteDobleCara" || tabla == "Pedidos" && columna == "Origen";
+        var cero = tabla == "Productos" && columna is "TieneInventario" or "AdmiteDobleCara" or "RequierePdf" || tabla == "Pedidos" && columna == "Origen";
         await using var comando = conexion.CreateCommand();
         comando.CommandText = $"SELECT \"Id\" FROM {Identificador(tabla)} WHERE {Identificador(columna)} IS " +
             (cero ? "NULL OR " + Identificador(columna) + " <> 0" : "NOT NULL") + " LIMIT 1";
@@ -119,9 +131,9 @@ internal static class SqliteUpgradeValidation
         return columnas.ToArray();
     }
 
-    private static async Task<Dictionary<long, Dictionary<string, string>>> FilasAsync(SqliteConnection conexion, string tabla, string[] columnas)
+    private static async Task<Dictionary<string, Dictionary<string, string>>> FilasAsync(SqliteConnection conexion, string tabla, string[] columnas)
     {
-        var resultado = new Dictionary<long, Dictionary<string, string>>();
+        var resultado = new Dictionary<string, Dictionary<string, string>>();
         await using var comando = conexion.CreateCommand();
         comando.CommandText = $"SELECT {string.Join(", ", columnas.Select(Identificador))} FROM {Identificador(tabla)} ORDER BY \"Id\"";
         await using var filas = await comando.ExecuteReaderAsync();
@@ -130,7 +142,7 @@ internal static class SqliteUpgradeValidation
         {
             var campos = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < columnas.Length; i++) campos[columnas[i]] = Huella(filas.GetValue(i));
-            var id = filas.GetInt64(idIndex);
+            var id = Convert.ToString(filas.GetValue(idIndex), CultureInfo.InvariantCulture)!;
             if (!resultado.TryAdd(id, campos)) throw new InvalidOperationException($"Id duplicado en {tabla}.");
         }
         return resultado;

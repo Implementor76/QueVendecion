@@ -17,6 +17,8 @@ public class QueVendecionDbContext : DbContext
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<ItemPedido> ItemsPedido => Set<ItemPedido>();
     public DbSet<MovimientoInventario> MovimientosInventario => Set<MovimientoInventario>();
+    public DbSet<DocumentoPdf> DocumentosPdf => Set<DocumentoPdf>();
+    public DbSet<SesionDocumento> SesionesDocumento => Set<SesionDocumento>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

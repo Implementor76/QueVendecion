@@ -54,6 +54,18 @@ public class SqliteUpgradeToolTests
             var resultado1 = await Ejecutar(dll, origen, primera);
             Assert.True(resultado1.Code == 0, resultado1.Output);
             Assert.Contains("Pedidos=2", resultado1.Output);
+            await using (var actualizada = new SqliteConnection($"Data Source={primera};Pooling=False"))
+            {
+                await actualizada.OpenAsync();
+                await using var insertar = actualizada.CreateCommand();
+                insertar.CommandText = """
+                    INSERT INTO SesionesDocumento (TiendaId,ClienteId,TokenHash,ExpiraEnUtc)
+                    VALUES (2,1,'HUELLA_FICTICIA','2026-10-25T00:00:00Z');
+                    INSERT INTO DocumentosPdf (Id,TiendaId,ClienteId,SesionHash,NombreOriginal,NombreInterno,TamanoBytes,Tipo,PaginasTotales,Sha256,CreadoEnUtc,ExpiraEnUtc,Estado)
+                    VALUES ('12345678-1234-1234-1234-123456789abc',2,1,'HUELLA_FICTICIA','prueba.pdf','12345678123412341234123456789abc.pdf',100,'application/pdf',2,'HUELLA_ARCHIVO','2026-10-24T00:00:00Z','2026-10-25T00:00:00Z','Temporal');
+                    """;
+                await insertar.ExecuteNonQueryAsync();
+            }
             var resultado2 = await Ejecutar(dll, primera, segunda);
             Assert.True(resultado2.Code == 0, resultado2.Output);
             await using var conn = new SqliteConnection($"Data Source={segunda};Pooling=False");
@@ -70,6 +82,11 @@ public class SqliteUpgradeToolTests
             Assert.Equal(0L, await Escalar(conn, "SELECT AdmiteDobleCara FROM Productos WHERE Id=3"));
             Assert.Equal(DBNull.Value, await Escalar(conn, "SELECT PapelInsumoId FROM Productos WHERE Id=3"));
             Assert.Equal(DBNull.Value, await Escalar(conn, "SELECT HojasConsumidas FROM ItemsPedido WHERE PedidoId=2"));
+            Assert.Equal(0L, await Escalar(conn, "SELECT RequierePdf FROM Productos WHERE Id=3"));
+            Assert.Equal(DBNull.Value, await Escalar(conn, "SELECT RevisionImpresion FROM Productos WHERE Id=3"));
+            Assert.Equal(1L, await Escalar(conn, "SELECT count(*) FROM DocumentosPdf"));
+            Assert.Equal(1L, await Escalar(conn, "SELECT count(*) FROM SesionesDocumento"));
+            Assert.Equal("Temporal", await Escalar(conn, "SELECT Estado FROM DocumentosPdf WHERE Id='12345678-1234-1234-1234-123456789abc'"));
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(carpeta, true); }
     }
@@ -122,9 +139,12 @@ public class SqliteUpgradeToolTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            modelBuilder.Entity<Producto>().Ignore(p => p.PapelInsumoId).Ignore(p => p.AdmiteDobleCara).Ignore(p => p.PapelInsumo);
+            modelBuilder.Entity<Producto>().Ignore(p => p.PapelInsumoId).Ignore(p => p.AdmiteDobleCara).Ignore(p => p.PapelInsumo)
+                .Ignore(p => p.RequierePdf).Ignore(p => p.RevisionImpresion);
             modelBuilder.Entity<ItemPedido>().Ignore(i => i.CarasPorJuego).Ignore(i => i.Juegos).Ignore(i => i.DobleCara)
-                .Ignore(i => i.PapelInsumoIdHistorico).Ignore(i => i.HojasConsumidas);
+                .Ignore(i => i.PapelInsumoIdHistorico).Ignore(i => i.HojasConsumidas).Ignore(i => i.DocumentoPdf);
+            modelBuilder.Ignore<DocumentoPdf>();
+            modelBuilder.Ignore<SesionDocumento>();
         }
     }
 

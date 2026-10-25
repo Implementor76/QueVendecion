@@ -7,7 +7,7 @@ public interface IPedidoService
 {
     Task<ResumenVentasDto> ResumenVentasAsync(int tiendaId, DateOnly desde, DateOnly hasta);
     Task<List<PedidoDto>> ObtenerPorTiendaAsync(int tiendaId, EstadoPedido? estado = null, DateOnly? fechaServicio = null);
-    Task<List<PedidoDto>> ObtenerPorClienteAsync(int tiendaId, int clienteId);
+    Task<List<PedidoDto>> ObtenerPorClienteAsync(int tiendaId, int clienteId, string? sesionDocumentoHash = null);
     Task<PedidoDto?> ObtenerPorIdAsync(int id);
     Task<PedidoDto> CrearAsync(CrearPedidoDto dto);
     Task<PedidoDto> RegistrarMostradorAsync(int tiendaId, int usuarioId, RegistrarVentaMostradorDto dto);

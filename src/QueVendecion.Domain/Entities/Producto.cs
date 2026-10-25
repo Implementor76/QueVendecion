@@ -17,6 +17,8 @@ public class Producto
     public int? ExistenciaMinima { get; set; }
     public int? PapelInsumoId { get; set; }
     public bool AdmiteDobleCara { get; set; }
+    public bool RequierePdf { get; set; }
+    public string? RevisionImpresion { get; set; }
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
     public string? FechasServicioJson { get; set; }
     // Null indicates an existing product awaiting explicit delivery mapping.

@@ -144,7 +144,8 @@ async function loadPedidos(container, estado, fechaServicio = '') {
           ${p.direccionEntrega ? `<p class="text-sm text-text-secondary w-full">Dirección: ${escapeHtml(p.direccionEntrega)}</p>` : ''}
           ${p.horarioConfirmado ? `<p class="text-sm text-primary w-full">Confirmado o estimado: ${escapeHtml(p.horarioConfirmado)}</p>` : ''}
           ${p.items.map(i => `
-            <span class="chip text-[0.75rem] py-1 px-2.5" style="cursor:default">${i.productoNombre} ×${i.cantidad}${i.carasPorJuego ? ` · ${i.carasPorJuego} caras/juego × ${i.juegos} juegos · ${i.dobleCara ? 'Ambos lados' : 'Un lado'} · ${i.hojasConsumidas} hojas consumidas` : ''}</span>
+            <span class="chip text-[0.75rem] py-1 px-2.5" style="cursor:default">${escapeHtml(i.productoNombre)} ×${i.cantidad}${i.carasPorJuego ? ` · ${i.carasPorJuego} caras/juego × ${i.juegos} juegos · ${i.dobleCara ? 'Ambos lados' : 'Un lado'} · ${i.hojasConsumidas} hojas consumidas` : ''}</span>
+            ${i.documentoPdfId ? `<div class="text-sm w-full">PDF: ${escapeHtml(i.nombrePdf)} · ${i.paginasTotalesPdf} páginas · selección ${escapeHtml(i.paginasSeleccionadas)} · ${i.juegos} juegos · ${i.dobleCara ? 'Ambos lados' : 'Un lado'} · ${i.cantidad} caras · ${i.hojasConsumidas} hojas · blanco y negro, carta, ajuste proporcional. ${i.archivoPdfDisponible ? `<button class="btn-ghost btn-descargar-pdf" data-id="${i.documentoPdfId}" data-nombre="${escapeHtml(i.nombrePdf)}">Descargar PDF</button>` : 'Archivo eliminado por política de retención'}</div>` : ''}
           `).join('')}
         </div>
         <div class="flex justify-between items-center mb-3">
@@ -182,6 +183,11 @@ async function loadPedidos(container, estado, fechaServicio = '') {
     `).join('');
 
     if (window.lucide) lucide.createIcons();
+
+    container.querySelectorAll('.btn-descargar-pdf').forEach(btn => btn.addEventListener('click', async () => {
+      try { await api.documentos.descargar(`/api/documentos/mi-tienda/${btn.dataset.id}`, btn.dataset.nombre); }
+      catch (err) { alert(err.message); }
+    }));
 
     container.querySelectorAll('.btn-avanzar').forEach(btn => {
       btn.addEventListener('click', async () => {

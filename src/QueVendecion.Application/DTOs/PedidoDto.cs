@@ -30,6 +30,10 @@ public class PedidoDto
 
 public class CrearPedidoDto
 {
+    public Guid? ClaveIdempotencia { get; set; }
+    public decimal? TotalEsperado { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? SesionDocumentoHash { get; set; }
     public int TiendaId { get; set; }
     public int? ClienteId { get; set; }
     public string? ClienteNombre { get; set; }
@@ -56,6 +60,11 @@ public class ItemPedidoDto
     public int? Juegos { get; set; }
     public bool? DobleCara { get; set; }
     public int? HojasConsumidas { get; set; }
+    public Guid? DocumentoPdfId { get; set; }
+    public string? NombrePdf { get; set; }
+    public int? PaginasTotalesPdf { get; set; }
+    public string? PaginasSeleccionadas { get; set; }
+    public bool ArchivoPdfDisponible { get; set; }
 }
 
 public class CrearItemPedidoDto
@@ -65,6 +74,10 @@ public class CrearItemPedidoDto
     public int? CarasPorJuego { get; set; }
     public int? Juegos { get; set; }
     public bool? DobleCara { get; set; }
+    public Guid? DocumentoPdfId { get; set; }
+    public string? Paginas { get; set; }
+    public string? RevisionImpresion { get; set; }
+    public decimal? PrecioEsperado { get; set; }
 }
 
 public class RegistrarVentaMostradorDto

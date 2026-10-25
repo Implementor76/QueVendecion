@@ -16,7 +16,7 @@ export async function renderMostrador(container) {
     <div class="min-h-screen bg-surface page-padding-bottom">
       <div class="header-primary"><a href="/mi-tienda" data-link class="text-white">← Mi tienda</a><h1 class="text-xl font-bold mt-2">Venta de mostrador</h1></div>
       <main class="page-padding max-w-xl mx-auto space-y-4">
-        <p class="text-sm text-text-secondary">Elige un producto disponible o un servicio del catálogo. El inventario mostrado es informativo; se comprueba al registrar.</p>
+        <p class="text-sm text-text-secondary">Elige un producto disponible o un servicio del catálogo. Los servicios de impresión PDF se solicitan desde el catálogo del cliente con archivo adjunto. El inventario mostrado es informativo; se comprueba al registrar.</p>
         <form id="venta-form" class="card space-y-4">
           <label class="block">Producto o servicio<select id="venta-producto" class="input-field w-full" required><option value="">Cargando catálogo…</option></select></label>
           <label class="block"><span id="venta-cantidad-label">Cantidad de unidades o servicios</span><input id="venta-cantidad" class="input-field w-full" type="number" min="1" step="1" inputmode="numeric" required value="1"></label>
@@ -98,7 +98,7 @@ export async function renderMostrador(container) {
         editar.type = 'button'; editar.className = 'btn-ghost w-full btn-editar-captura'; editar.textContent = 'Editar captura';
         editar.addEventListener('click', async () => {
           sessionStorage.removeItem(storageKey); pendiente = null; bloquear(false); revision.classList.add('hidden');
-          productos = (await api.productos.getByMiTienda()).filter(p => p.disponible);
+          productos = (await api.productos.getByMiTienda()).filter(p => p.disponible && !p.requierePdf);
           select.innerHTML = `<option value="">Selecciona producto o servicio</option>${productos.map(p => `<option value="${p.id}">${escapar(p.nombre)} · ${dinero(p.precio)}</option>`).join('')}`;
           actualizar();
         });
@@ -126,7 +126,7 @@ export async function renderMostrador(container) {
   });
   for (const campo of [select, cantidad, juegos, lados]) campo.addEventListener('input', actualizar);
   try {
-    productos = (await api.productos.getByMiTienda()).filter(p => p.disponible);
+    productos = (await api.productos.getByMiTienda()).filter(p => p.disponible && !p.requierePdf);
     select.innerHTML = `<option value="">Selecciona producto o servicio</option>${productos.map(p => `<option value="${p.id}">${escapar(p.nombre)} · ${dinero(p.precio)}</option>`).join('')}`;
     if (!productos.length) error.textContent = 'Da de alta un producto o servicio disponible en el catálogo.';
     if (pendiente) {

@@ -33,11 +33,13 @@ await using (var db = new QueVendecionDbContext(dbOptions))
     await CostosSchemaUpgrade.AplicarAsync(db);
     await MostradorSchemaUpgrade.AplicarAsync(db);
     await PapelSchemaUpgrade.AplicarAsync(db);
+    await DocumentosSchemaUpgrade.AplicarAsync(db);
     await InventarioSchemaUpgrade.VerificarAsync(db);
     await OperacionSchemaUpgrade.VerificarAsync(db);
     await CostosSchemaUpgrade.VerificarAsync(db);
     await MostradorSchemaUpgrade.VerificarAsync(db);
     await PapelSchemaUpgrade.VerificarAsync(db);
+    await DocumentosSchemaUpgrade.VerificarAsync(db);
 }
 
 await destinationConnection.OpenAsync();

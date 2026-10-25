@@ -7,6 +7,7 @@ using QueVendecion.Application.Interfaces;
 using QueVendecion.Domain.Enums;
 using QueVendecion.Infrastructure.Data;
 using QueVendecion.Infrastructure.Services;
+using QueVendecion.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,8 @@ builder.Services.AddScoped<IProductoService, ProductoService>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<IClienteService, ClienteService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<DocumentoService>();
+builder.Services.AddHostedService<DocumentoLimpiezaService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Jwt:Key not configured. Set it in User Secrets or environment variables.");
@@ -102,6 +105,7 @@ using (var scope = app.Services.CreateScope())
         await CostosSchemaUpgrade.AplicarAsync(db);
         await MostradorSchemaUpgrade.AplicarAsync(db);
         await PapelSchemaUpgrade.AplicarAsync(db);
+        await DocumentosSchemaUpgrade.AplicarAsync(db);
         return;
     }
     if (args.Contains("--upgrade-costos"))
@@ -122,6 +126,7 @@ using (var scope = app.Services.CreateScope())
         await CostosSchemaUpgrade.AplicarAsync(db);
         await MostradorSchemaUpgrade.AplicarAsync(db);
         await PapelSchemaUpgrade.AplicarAsync(db);
+        await DocumentosSchemaUpgrade.AplicarAsync(db);
     }
     else
     {
@@ -132,6 +137,7 @@ using (var scope = app.Services.CreateScope())
         await CostosSchemaUpgrade.VerificarAsync(db);
         await MostradorSchemaUpgrade.VerificarAsync(db);
         await PapelSchemaUpgrade.VerificarAsync(db);
+        await DocumentosSchemaUpgrade.VerificarAsync(db);
     }
 
     if (!db.UsuariosTienda.Any(u => u.Rol == RolUsuario.SuperAdmin))

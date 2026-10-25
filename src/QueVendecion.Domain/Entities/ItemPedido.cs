@@ -13,6 +13,7 @@ public class ItemPedido
     public bool? DobleCara { get; set; }
     public int? PapelInsumoIdHistorico { get; set; }
     public int? HojasConsumidas { get; set; }
+    public DocumentoPdf? DocumentoPdf { get; set; }
     public decimal Subtotal => Cantidad * PrecioUnitario;
 
     public Pedido Pedido { get; set; } = null!;

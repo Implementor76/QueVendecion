@@ -13,8 +13,8 @@ async function request(url, options = {}) {
   }
 
   const response = await fetch(`${API_BASE}${url}`, {
-    headers,
-    ...options
+    ...options,
+    headers
   });
 
   if (!response.ok) {
@@ -29,6 +29,7 @@ async function request(url, options = {}) {
     safeCodes.push('direccion_entrega_invalida');
     safeCodes.push('clave_invalida', 'pago_invalido', 'nota_invalida', 'inventario_no_permitido', 'idempotencia_conflicto', 'registro_ocupado', 'acceso_denegado', 'precio_actualizado', 'precio_invalido', 'importe_invalido');
     safeCodes.push('papel_invalido', 'papel_cantidad_invalida', 'papel_configuracion_cambio', 'doble_cara_no_disponible', 'insumo_referenciado', 'inventario_inactivo');
+    safeCodes.push('pdf_configuracion_invalida', 'pdf_configuracion_cambio', 'pdf_requerido', 'pdf_invalido', 'pdf_protegido', 'pdf_tipo_invalido', 'pdf_tamano_invalido', 'pdf_paginas_invalidas', 'pdf_no_disponible', 'pdf_sesion_invalida', 'pdf_repetido');
     const message = response.status < 500 && safeCodes.includes(payload?.code)
       ? payload.message : 'No se pudo completar la operación. Revisa los datos e intenta de nuevo.';
     const error = new Error(message);
@@ -43,6 +44,28 @@ async function request(url, options = {}) {
 }
 
 export const api = {
+  documentos: {
+    subir: async (slug, archivo, sesion) => {
+      const body = new FormData(); body.append('archivo', archivo);
+      const response = await fetch(`/api/documentos/tienda/${encodeURIComponent(slug)}/pdf`, {
+        method: 'POST', headers: { 'X-Documento-Sesion': sesion }, body
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'No se pudo validar el PDF.');
+      }
+      return response.json();
+    },
+    descargar: async (url, nombre, sesion) => {
+      const headers = sesion ? { 'X-Documento-Sesion': sesion } : { Authorization: `Bearer ${getToken()}` };
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error('El PDF no está disponible para descarga.');
+      const blob = await response.blob();
+      const enlace = document.createElement('a');
+      enlace.href = URL.createObjectURL(blob); enlace.download = nombre || 'documento.pdf';
+      enlace.click(); setTimeout(() => URL.revokeObjectURL(enlace.href), 60000);
+    }
+  },
   tiendas: {
     getMiTienda: () => request('/tiendas/mi-tienda'),
     update: (id, data) => request('/tiendas/mi-tienda', { method: 'PUT', body: JSON.stringify(data) }),
@@ -91,7 +114,7 @@ export const api = {
     },
     getOpciones: (slug) => request(`/public/tienda/${slug}/opciones`),
     registrarCliente: (slug, data) => request(`/public/tienda/${slug}/cliente`, { method: 'POST', body: JSON.stringify(data) }),
-    getPedidosCliente: (slug, telefono) => request(`/public/tienda/${slug}/cliente/${encodeURIComponent(telefono)}/pedidos`),
-    crearPedido: (slug, data) => request(`/public/tienda/${slug}/pedido`, { method: 'POST', body: JSON.stringify(data) })
+    getPedidosCliente: (slug, telefono, sesion) => request(`/public/tienda/${slug}/cliente/${encodeURIComponent(telefono)}/pedidos`, { headers: sesion ? { 'X-Documento-Sesion': sesion } : {} }),
+    crearPedido: (slug, data, sesion) => request(`/public/tienda/${slug}/pedido`, { method: 'POST', headers: sesion ? { 'X-Documento-Sesion': sesion } : {}, body: JSON.stringify(data) })
   }
 };

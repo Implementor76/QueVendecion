@@ -50,6 +50,77 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.ToTable("Clientes");
                 });
 
+            modelBuilder.Entity("QueVendecion.Domain.Entities.DocumentoPdf", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ClienteId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreadoEnUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("ExpiraEnUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ItemPedidoId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NombreInterno")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("NombreOriginal")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PaginasSeleccionadas")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("PaginasTotales")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SesionHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("TamanoBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("TiendaId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemPedidoId")
+                        .IsUnique();
+
+                    b.HasIndex("TiendaId", "ClienteId", "Estado");
+
+                    b.ToTable("DocumentosPdf");
+                });
+
             modelBuilder.Entity("QueVendecion.Domain.Entities.ItemPedido", b =>
                 {
                     b.Property<int>("Id")
@@ -293,6 +364,15 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.Property<decimal>("Precio")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<bool>("RequierePdf")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("RevisionImpresion")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
                     b.Property<int?>("Stock")
                         .HasColumnType("integer");
 
@@ -311,6 +391,36 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.HasIndex("TiendaId");
 
                     b.ToTable("Productos");
+                });
+
+            modelBuilder.Entity("QueVendecion.Domain.Entities.SesionDocumento", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClienteId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ExpiraEnUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TiendaId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("SesionesDocumento");
                 });
 
             modelBuilder.Entity("QueVendecion.Domain.Entities.Tienda", b =>
@@ -395,6 +505,16 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
                     b.HasIndex("TiendaId");
 
                     b.ToTable("UsuariosTienda");
+                });
+
+            modelBuilder.Entity("QueVendecion.Domain.Entities.DocumentoPdf", b =>
+                {
+                    b.HasOne("QueVendecion.Domain.Entities.ItemPedido", "ItemPedido")
+                        .WithOne("DocumentoPdf")
+                        .HasForeignKey("QueVendecion.Domain.Entities.DocumentoPdf", "ItemPedidoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ItemPedido");
                 });
 
             modelBuilder.Entity("QueVendecion.Domain.Entities.ItemPedido", b =>
@@ -482,6 +602,11 @@ namespace QueVendecion.Infrastructure.Migrations.PostgreSql
             modelBuilder.Entity("QueVendecion.Domain.Entities.Cliente", b =>
                 {
                     b.Navigation("Pedidos");
+                });
+
+            modelBuilder.Entity("QueVendecion.Domain.Entities.ItemPedido", b =>
+                {
+                    b.Navigation("DocumentoPdf");
                 });
 
             modelBuilder.Entity("QueVendecion.Domain.Entities.Pedido", b =>

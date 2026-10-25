@@ -3,6 +3,8 @@ using QueVendecion.Application.DTOs;
 using QueVendecion.Application.Interfaces;
 using QueVendecion.Domain.Enums;
 using QueVendecion.Infrastructure.Services;
+using QueVendecion.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace QueVendecion.Api.Controllers;
 
@@ -14,17 +16,21 @@ public class PublicController : ControllerBase
     private readonly IProductoService _productoService;
     private readonly IPedidoService _pedidoService;
     private readonly IClienteService _clienteService;
+    private readonly DocumentoService _documentos;
+    private readonly QueVendecionDbContext _db;
 
     public PublicController(
         ITiendaService tiendaService,
         IProductoService productoService,
         IPedidoService pedidoService,
-        IClienteService clienteService)
+        IClienteService clienteService, DocumentoService documentos, QueVendecionDbContext db)
     {
         _tiendaService = tiendaService;
         _productoService = productoService;
         _pedidoService = pedidoService;
         _clienteService = clienteService;
+        _documentos = documentos;
+        _db = db;
     }
 
     [HttpGet("tienda/{slug}")]
@@ -42,7 +48,7 @@ public class PublicController : ControllerBase
         if (tienda == null) return NotFound();
 
         var productos = await _productoService.ObtenerPorTiendaAsync(tienda.Id);
-        return productos.Where(p => p.Disponible && (modalidad != ModalidadPedido.AlMomento || p.FechasServicio.Count == 0)
+        return productos.Where(p => p.Disponible && (!p.RequierePdf || entrega is null or FormaEntrega.Recoleccion) && (modalidad != ModalidadPedido.AlMomento || p.FechasServicio.Count == 0)
             && (entrega == null || p.EntregaPermitida == (entrega == FormaEntrega.Recoleccion ? EntregaProducto.Recoleccion : EntregaProducto.Domicilio) || p.EntregaPermitida == EntregaProducto.Ambas)
             && (fechaServicio == null || p.FechasServicio.Count == 0 || p.FechasServicio.Contains(fechaServicio.Value))).ToList();
     }
@@ -62,13 +68,19 @@ public class PublicController : ControllerBase
                 .Where(o => o.ventanas.Count > 0).ToList()
             : new();
         return Ok(new { hoy, recepcionDisponible = OperacionReglas.PuedeRecibirAhora(config, DateTime.UtcNow),
-            alMomentoDisponible = OperacionReglas.PuedeAlMomento(config, DateTime.UtcNow), fechas });
+            alMomentoDisponible = OperacionReglas.PuedeAlMomento(config, DateTime.UtcNow), fechas,
+            documentos = new { maxBytes = _documentos.MaxBytes, maxPaginas = _documentos.MaxPaginas,
+                maxTrabajos = _documentos.MaxTrabajos, horasTemporal = _documentos.HorasTemporal,
+                diasRetencion = _documentos.DiasRetencion } });
     }
 
     [HttpPost("tienda/{slug}/cliente")]
     public async Task<ActionResult<ClienteDto>> RegistrarCliente(string slug, [FromBody] CrearClienteDto dto)
     {
+        var tienda = await _tiendaService.ObtenerPorSlugAsync(slug);
+        if (tienda == null) return NotFound();
         var cliente = await _clienteService.CrearOCrearAsync(dto);
+        cliente.SesionDocumentos = await _documentos.CrearSesionAsync(tienda.Id, cliente.Id);
         return Ok(cliente);
     }
 
@@ -88,7 +100,17 @@ public class PublicController : ControllerBase
         var cliente = await _clienteService.ObtenerPorTelefonoAsync(telefono);
         if (cliente == null) return Ok(new List<PedidoDto>());
 
-        var pedidos = await _pedidoService.ObtenerPorClienteAsync(tienda.Id, cliente.Id);
+        string? sesionHash = null;
+        if (Request.Headers.TryGetValue("X-Documento-Sesion", out var token))
+        {
+            try
+            {
+                var sesion = await _documentos.ValidarSesionAsync(tienda.Id, token.ToString());
+                if (sesion.ClienteId == cliente.Id) sesionHash = sesion.TokenHash;
+            }
+            catch (QueVendecion.Application.Exceptions.ReglaNegocioException) { }
+        }
+        var pedidos = await _pedidoService.ObtenerPorClienteAsync(tienda.Id, cliente.Id, sesionHash);
         return Ok(pedidos);
     }
 
@@ -110,6 +132,13 @@ public class PublicController : ControllerBase
         }
 
         dto.TiendaId = tienda.Id;
+        if (Request.Headers.TryGetValue("X-Documento-Sesion", out var token))
+        {
+            var sesion = await _documentos.ValidarSesionAsync(tienda.Id, token.ToString());
+            if (sesion.ClienteId != dto.ClienteId)
+                throw new QueVendecion.Application.Exceptions.ReglaNegocioException("pdf_sesion_invalida", "La sesión no pertenece a este cliente.");
+            dto.SesionDocumentoHash = sesion.TokenHash;
+        }
         var pedido = await _pedidoService.CrearAsync(dto);
         return CreatedAtAction(nameof(CrearPedido), new { slug }, pedido);
     }

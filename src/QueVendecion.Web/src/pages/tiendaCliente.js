@@ -102,7 +102,7 @@ function renderLogin(container, slug, tienda, opciones) {
 
     try {
       const cliente = await api.public.registrarCliente(slug, { nombre, telefono });
-      setClient(slug, { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono });
+      setClient(slug, { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono, sesionDocumentos: cliente.sesionDocumentos });
       renderApp(container, slug, tienda, cliente, opciones);
     } catch (error) {
       alert('Error al registrar. Intenta de nuevo.');
@@ -224,7 +224,7 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
           ${productos.map((p, i) => {
             const agotado = p.tieneInventario && (p.stock ?? 0) <= 0;
             return `
-                  <div class="card animate-fade-in" style="animation-delay:${i * 30}ms" data-product-id="${p.id}" data-nombre="${p.nombre}" data-precio="${p.precio}" data-papel="${p.consumePapel ? '1' : '0'}" data-doble="${p.admiteDobleCara ? '1' : '0'}" ${agotado ? 'data-agotado="1"' : ''}>
+                  <div class="card animate-fade-in" style="animation-delay:${i * 30}ms" data-product-id="${p.id}" data-nombre="${escapeHtml(p.nombre)}" data-precio="${p.precio}" data-papel="${p.consumePapel ? '1' : '0'}" data-pdf="${p.requierePdf ? '1' : '0'}" data-revision="${p.revisionImpresion || ''}" data-doble="${p.admiteDobleCara ? '1' : '0'}" ${agotado ? 'data-agotado="1"' : ''}>
                     <div class="flex-1 mr-4">
                       <h3 class="font-semibold text-primary text-[0.9375rem]">${p.nombre}</h3>
                       ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5 leading-relaxed">${p.descripcion}</p>` : ''}
@@ -239,7 +239,7 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
                       </div>
                     </div>
                     <div class="flex flex-col items-center gap-2">
-                      ${p.consumePapel ? `<div class="space-y-2 text-sm"><label>Caras por juego<input class="input-field papel-caras" type="number" min="1" max="100000" step="1" value="1"></label><label>Juegos<input class="input-field papel-juegos" type="number" min="1" max="100000" step="1" value="1"></label><label>Lados<select class="input-field papel-lados"><option value="uno">Un lado</option>${p.admiteDobleCara ? '<option value="ambos">Ambos lados</option>' : ''}</select></label><p class="papel-preview">1 cara · 1 hoja · $${p.precio.toFixed(2)}</p><button class="btn-accent papel-agregar" type="button">Agregar servicio</button></div>` : `
+                      ${p.requierePdf ? `<div class="space-y-2 text-sm w-full"><p>Blanco y negro, papel carta. El contenido se ajustará al área imprimible conservando sus proporciones.</p><p>Los PDF se eliminan ${opciones.documentos?.diasRetencion ?? 30} días después de entregar o cancelar el pedido; cargas sin pedido vencen en ${opciones.documentos?.horasTemporal ?? 24} horas.</p><label>PDF obligatorio<input class="input-field pdf-archivo" type="file" accept=".pdf,application/pdf"></label><button class="btn-ghost pdf-subir" type="button">Validar y subir PDF</button><p class="pdf-estado" role="status">${cliente.sesionDocumentos ? 'Sube un PDF para contar sus páginas.' : 'Sal e ingresa de nuevo para activar la sesión segura de documentos.'}</p><label>Páginas<select class="input-field pdf-modo"><option value="todas">Todas las páginas</option><option value="rango">Rango</option></select></label><input class="input-field pdf-rango hidden" placeholder="1-3,5,8-10" aria-label="Rango de páginas"><p>La selección se normaliza en orden ascendente sin duplicados y se imprime en ese orden.</p><label>Juegos<input class="input-field pdf-juegos" type="number" min="1" max="100000" step="1" value="1"></label><label>Lados<select class="input-field pdf-lados"><option value="uno">Un lado</option>${p.admiteDobleCara ? '<option value="ambos">Ambos lados</option>' : ''}</select></label><p class="pdf-preview">Adjunta el PDF para calcular.</p><button class="btn-accent pdf-agregar" type="button">Agregar impresión</button></div>` : p.consumePapel ? `<div class="space-y-2 text-sm"><label>Caras por juego<input class="input-field papel-caras" type="number" min="1" max="100000" step="1" value="1"></label><label>Juegos<input class="input-field papel-juegos" type="number" min="1" max="100000" step="1" value="1"></label><label>Lados<select class="input-field papel-lados"><option value="uno">Un lado</option>${p.admiteDobleCara ? '<option value="ambos">Ambos lados</option>' : ''}</select></label><p class="papel-preview">1 cara · 1 hoja · $${p.precio.toFixed(2)}</p><button class="btn-accent papel-agregar" type="button">Agregar servicio</button></div>` : `
                       <div class="flex items-center gap-2 ${agotado ? 'opacity-40 pointer-events-none' : ''}">
                     <button class="qty-btn minus" data-id="${p.id}">
                       <i data-lucide="minus" class="w-4 h-4"></i>
@@ -344,7 +344,79 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
 }
 
 function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones) {
-  content.querySelectorAll('[data-papel="1"]').forEach(card => {
+  const pendienteKey = `qvd_pdf_pedido_pendiente_${slug}_${cliente.id}`;
+  const pendienteRaw = sessionStorage.getItem(pendienteKey);
+  if (pendienteRaw) {
+    const aviso = document.createElement('div'); aviso.className = 'card mb-4 space-y-2';
+    aviso.innerHTML = '<p>Hay un envío pendiente. Reintenta con la misma clave para comprobar si se registró.</p><button class="btn-accent pdf-reintentar">Reintentar pedido</button><button class="btn-ghost pdf-descartar">Descartar intento</button>';
+    content.querySelector('.page-padding')?.prepend(aviso);
+    aviso.querySelector('.pdf-reintentar').addEventListener('click', async () => {
+      const boton = aviso.querySelector('.pdf-reintentar'); boton.disabled = true;
+      try { await api.public.crearPedido(slug, JSON.parse(pendienteRaw), cliente.sesionDocumentos); sessionStorage.removeItem(pendienteKey); aviso.textContent = 'Pedido registrado. Consúltalo en Mis pedidos.'; }
+      catch (e) { aviso.querySelector('p').textContent = e.message; boton.disabled = false; }
+    });
+    aviso.querySelector('.pdf-descartar').addEventListener('click', () => { sessionStorage.removeItem(pendienteKey); aviso.remove(); });
+  }
+  content.querySelectorAll('[data-pdf="1"]').forEach(card => {
+    let documento = null;
+    const archivo = card.querySelector('.pdf-archivo'), estado = card.querySelector('.pdf-estado');
+    const modo = card.querySelector('.pdf-modo'), rango = card.querySelector('.pdf-rango');
+    const juegos = card.querySelector('.pdf-juegos'), lados = card.querySelector('.pdf-lados');
+    const preview = card.querySelector('.pdf-preview');
+    archivo.addEventListener('change', () => {
+      documento = null;
+      estado.textContent = 'Valida y sube el PDF seleccionado antes de agregarlo.';
+      preview.textContent = 'Adjunta el PDF para calcular.';
+    });
+    const calcular = () => {
+      if (!documento) return null;
+      const j = Number(juegos.value);
+      let paginas;
+      try {
+        if (modo.value === 'todas') paginas = Array.from({ length: documento.paginas }, (_, i) => i + 1);
+        else {
+          paginas = new Set();
+          for (const parte of rango.value.split(',')) {
+            const limites = parte.trim().split('-');
+            if (limites.length > 2 || !limites.every(x => /^\d+$/.test(x))) throw Error();
+            const a = Number(limites[0]), b = Number(limites.at(-1));
+            if (a < 1 || b > documento.paginas || a > b) throw Error();
+            for (let n = a; n <= b; n++) paginas.add(n);
+          }
+          paginas = [...paginas].sort((a, b) => a - b);
+        }
+        if (!paginas.length || !Number.isSafeInteger(j) || j < 1 || paginas.length * j > 100000) throw Error();
+      } catch { preview.textContent = 'Revisa las páginas y los juegos.'; return null; }
+      const caras = paginas.length * j;
+      const hojas = (lados.value === 'ambos' ? Math.ceil(paginas.length / 2) : paginas.length) * j;
+      preview.textContent = `${paginas.length} caras/juego · ${j} juegos · ${caras} caras cobradas · ${hojas} hojas · $${(Number(card.dataset.precio) * caras).toFixed(2)}`;
+      return { caras, hojas, paginas: modo.value === 'todas' ? 'todas' : paginas.join(','), juegos: j, dobleCara: lados.value === 'ambos' };
+    };
+    card.querySelector('.pdf-subir').addEventListener('click', async () => {
+      if (!cliente.sesionDocumentos || !archivo.files[0]) { estado.textContent = 'Selecciona un PDF e inicia sesión de nuevo si es necesario.'; return; }
+      const boton = card.querySelector('.pdf-subir'); boton.disabled = true;
+      try {
+        documento = await api.documentos.subir(slug, archivo.files[0], cliente.sesionDocumentos);
+        estado.textContent = `${documento.nombre} · ${(documento.tamano / 1048576).toFixed(2)} MiB · ${documento.paginas} páginas`;
+        calcular();
+      } catch (e) { documento = null; estado.textContent = e.message; }
+      finally { boton.disabled = false; }
+    });
+    modo.addEventListener('change', () => { rango.classList.toggle('hidden', modo.value !== 'rango'); calcular(); });
+    for (const campo of [rango, juegos, lados]) campo.addEventListener('input', calcular);
+    card.querySelector('.pdf-agregar').addEventListener('click', () => {
+      const c = calcular();
+      if (!c) return;
+      const clave = `${card.dataset.productId}:${documento.id}`;
+      carrito[clave] = { id: card.dataset.productId, nombre: card.dataset.nombre, precio: Number(card.dataset.precio),
+        cantidad: c.caras, carasPorJuego: c.caras / c.juegos, juegos: c.juegos, dobleCara: c.dobleCara, hojas: c.hojas,
+        documentoPdfId: documento.id, nombrePdf: documento.nombre, paginas: c.paginas,
+        paginasTotalesPdf: documento.paginas, revisionImpresion: card.dataset.revision };
+      updateCarrito(carrito); actualizarBarra(content, carrito);
+      estado.textContent = 'Impresión agregada al pedido.';
+    });
+  });
+  content.querySelectorAll('[data-papel="1"]:not([data-pdf="1"])').forEach(card => {
     const caras = card.querySelector('.papel-caras');
     const juegos = card.querySelector('.papel-juegos');
     const lados = card.querySelector('.papel-lados');
@@ -432,7 +504,11 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
     const items = Object.values(carrito).map(c => ({
       productoId: parseInt(c.id),
       cantidad: c.cantidad,
-      carasPorJuego: c.carasPorJuego ?? null, juegos: c.juegos ?? null, dobleCara: c.dobleCara ?? null
+      carasPorJuego: c.documentoPdfId ? null : c.carasPorJuego ?? null,
+      juegos: c.juegos ?? null, dobleCara: c.dobleCara ?? null,
+      documentoPdfId: c.documentoPdfId ?? null, paginas: c.paginas ?? null,
+      revisionImpresion: c.revisionImpresion ?? null,
+      precioEsperado: c.documentoPdfId ? c.precio : null
     }));
 
     if (items.length === 0) return;
@@ -445,7 +521,10 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
     if (entrega === 'Domicilio' && !direccionEntrega) { alert('Captura la dirección de entrega.'); return; }
 
     try {
-      await api.public.crearPedido(slug, {
+      btnConfirmar.disabled = true;
+      const nuevo = {
+        claveIdempotencia: crypto.randomUUID(),
+        totalEsperado: Object.values(carrito).reduce((sum, c) => sum + c.precio * c.cantidad, 0),
         telefonoCliente: cliente.telefono,
         formaPago,
         observaciones: observaciones || null,
@@ -455,7 +534,11 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
         fechaServicio: seleccion.modalidad === 'Programado' ? seleccion.fecha : opciones.hoy,
         ventanaSolicitada: seleccion.modalidad === 'Programado' ? seleccion.ventana : null,
         items
-      });
+      };
+      const datos = sessionStorage.getItem(pendienteKey) ? JSON.parse(sessionStorage.getItem(pendienteKey)) : nuevo;
+      sessionStorage.setItem(pendienteKey, JSON.stringify(datos));
+      await api.public.crearPedido(slug, datos, cliente.sesionDocumentos);
+      sessionStorage.removeItem(pendienteKey);
 
       modal.classList.add('hidden');
       content.innerHTML = `
@@ -482,6 +565,7 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
       });
     } catch (error) {
       alert(error.message || 'Error al enviar el pedido. Intenta de nuevo.');
+      btnConfirmar.disabled = false;
     }
   });
 
@@ -513,7 +597,7 @@ function mostrarResumen(content, carrito) {
 
   resumen.innerHTML = items.map(c => `
     <div class="flex justify-between text-sm py-1">
-      <span class="text-primary">${escapeHtml(c.nombre)} <span class="text-text-secondary">×${c.cantidad}${c.carasPorJuego ? ` · ${c.carasPorJuego} caras/juego, ${c.juegos} juegos, ${c.dobleCara ? 'ambos lados' : 'un lado'}, ${c.hojas} hojas` : ''}</span></span>
+      <span class="text-primary">${escapeHtml(c.nombre)} <span class="text-text-secondary">×${c.cantidad}${c.nombrePdf ? ` · ${escapeHtml(c.nombrePdf)} (${c.paginasTotalesPdf} páginas; selección ${escapeHtml(c.paginas)}), ${c.juegos} juegos, ${c.dobleCara ? 'ambos lados' : 'un lado'}, ${c.hojas} hojas · blanco y negro, carta, ajuste proporcional` : c.carasPorJuego ? ` · ${c.carasPorJuego} caras/juego, ${c.juegos} juegos, ${c.dobleCara ? 'ambos lados' : 'un lado'}, ${c.hojas} hojas` : ''}</span></span>
       <span class="font-semibold text-primary">$${(c.precio * c.cantidad).toFixed(2)}</span>
     </div>
   `).join('') + `
@@ -534,7 +618,7 @@ function renderPedidosTab(content, slug, cliente, zonaHoraria) {
     </div>
   `;
 
-  api.public.getPedidosCliente(slug, cliente.telefono).then(pedidos => {
+  api.public.getPedidosCliente(slug, cliente.telefono, cliente.sesionDocumentos).then(pedidos => {
     if (pedidos.length === 0) {
       content.innerHTML = `
         <div class="empty-state">
@@ -579,9 +663,10 @@ function renderPedidosTab(content, slug, cliente, zonaHoraria) {
           ${p.estado === 'Listo' ? '<p class="text-sm text-success">Pedido listo para recoger o entregar</p>' : ''}
           ${p.items.map(i => `
             <div class="flex justify-between text-sm">
-              <span class="text-primary">${i.productoNombre} <span class="text-text-secondary">×${i.cantidad}${i.carasPorJuego ? ` · ${i.carasPorJuego} caras/juego, ${i.juegos} juegos, ${i.dobleCara ? 'ambos lados' : 'un lado'}` : ''}</span></span>
+              <span class="text-primary">${escapeHtml(i.productoNombre)} <span class="text-text-secondary">×${i.cantidad}${i.nombrePdf ? ` · ${escapeHtml(i.nombrePdf)} (${i.paginasTotalesPdf} páginas; selección ${escapeHtml(i.paginasSeleccionadas)}), ${i.juegos} juegos, ${i.dobleCara ? 'ambos lados' : 'un lado'}, ${i.hojasConsumidas} hojas · blanco y negro, carta, ajuste proporcional` : i.carasPorJuego ? ` · ${i.carasPorJuego} caras/juego, ${i.juegos} juegos, ${i.dobleCara ? 'ambos lados' : 'un lado'}` : ''}</span></span>
               <span class="font-medium text-primary">$${i.subtotal.toFixed(2)}</span>
             </div>
+            ${i.documentoPdfId ? `<div>${i.archivoPdfDisponible ? `<button class="btn-ghost cliente-descargar-pdf" data-id="${i.documentoPdfId}" data-nombre="${escapeHtml(i.nombrePdf)}">Descargar PDF</button>` : '<span class="text-sm">Archivo eliminado por política de retención</span>'}</div>` : ''}
           `).join('')}
         </div>
         <div class="flex justify-between items-center pt-3" style="border-top:1px solid #eeece8">
@@ -608,6 +693,10 @@ function renderPedidosTab(content, slug, cliente, zonaHoraria) {
       </div>
     `;
     if (window.lucide) lucide.createIcons();
+    content.querySelectorAll('.cliente-descargar-pdf').forEach(btn => btn.addEventListener('click', async () => {
+      try { await api.documentos.descargar(`/api/documentos/tienda/${encodeURIComponent(slug)}/${btn.dataset.id}`, btn.dataset.nombre, cliente.sesionDocumentos); }
+      catch (err) { alert(err.message); }
+    }));
   }).catch(() => {
     content.innerHTML = `
       <div class="empty-state">

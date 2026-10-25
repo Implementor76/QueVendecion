@@ -71,6 +71,7 @@ export function renderMenu(container, params) {
               <div id="prod-stock-wrap" class="hidden"><input type="number" id="prod-stock" placeholder="Stock" step="1" min="0" class="input-field" /></div>
               <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="prod-consume-papel"> Este servicio consume papel</label>
               <div id="prod-papel-wrap" class="hidden space-y-2 text-sm"><label>Papel del mismo inventario<select id="prod-papel" class="input-field w-full"><option value="">Selecciona papel</option></select></label><label class="flex items-center gap-2"><input type="checkbox" id="prod-doble"> Admite ambos lados</label><p>Precio y costo estimado por cara; el costo ya incluye papel. El stock del insumo se mide en hojas.</p></div>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="prod-pdf"> Impresión de PDF, blanco y negro, tamaño carta (solo recolección)</label>
               <label class="block text-sm">Existencia mínima (opcional)<input type="number" id="prod-minimo" step="1" min="0" class="input-field"></label>
               <div id="prod-msg" class="text-sm hidden text-center"></div>
               <div class="flex gap-2">
@@ -137,7 +138,8 @@ export function renderMenu(container, params) {
           ? container.querySelector('#prod-stock').valueAsNumber
           : null,
         papelInsumoId: container.querySelector('#prod-consume-papel').checked ? Number(container.querySelector('#prod-papel').value) : null,
-        admiteDobleCara: container.querySelector('#prod-consume-papel').checked && container.querySelector('#prod-doble').checked
+        admiteDobleCara: container.querySelector('#prod-consume-papel').checked && container.querySelector('#prod-doble').checked,
+        requierePdf: container.querySelector('#prod-pdf').checked
       });
       msg.textContent = '¡Producto agregado! Agrega otro o cierra.';
       msg.className = 'text-sm text-success';
@@ -237,6 +239,7 @@ async function loadProductos(container) {
             </div>
             <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="edit-consume-papel"> Este servicio consume papel</label>
             <div id="edit-papel-wrap" class="hidden space-y-2 text-sm"><label>Papel del mismo inventario<select id="edit-papel" class="input-field w-full"><option value="">Selecciona papel</option>${productos.filter(p => p.tieneInventario).map(p => `<option value="${p.id}">${escapar(p.nombre)}</option>`).join('')}</select></label><label class="flex items-center gap-2"><input type="checkbox" id="edit-doble"> Admite ambos lados</label><p>Precio y costo estimado por cara; el costo ya incluye papel. El stock del insumo se mide en hojas.</p></div>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="edit-pdf"> Impresión de PDF, blanco y negro, tamaño carta (solo recolección)</label>
             <label class="block text-sm">Existencia mínima (opcional)<input type="number" id="edit-minimo" step="1" min="0" class="input-field"></label>
             <button type="submit" class="btn-accent w-full">
               <i data-lucide="check" class="w-4 h-4"></i> Guardar
@@ -264,6 +267,7 @@ async function loadProductos(container) {
         container.querySelector('#edit-consume-papel').checked = producto.consumePapel;
         container.querySelector('#edit-papel').value = producto.papelInsumoId ?? '';
         container.querySelector('#edit-doble').checked = producto.admiteDobleCara;
+        container.querySelector('#edit-pdf').checked = producto.requierePdf;
         syncEditPapel();
         container.querySelector('#edit-id').value = btn.dataset.id;
         container.querySelector('#edit-nombre').value = btn.dataset.nombre;
@@ -298,7 +302,8 @@ async function loadProductos(container) {
             ? container.querySelector('#edit-stock').valueAsNumber
             : null,
           papelInsumoId: container.querySelector('#edit-consume-papel').checked ? Number(container.querySelector('#edit-papel').value) : null,
-          admiteDobleCara: container.querySelector('#edit-consume-papel').checked && container.querySelector('#edit-doble').checked
+          admiteDobleCara: container.querySelector('#edit-consume-papel').checked && container.querySelector('#edit-doble').checked,
+          requierePdf: container.querySelector('#edit-pdf').checked
         });
         container.querySelector('#modal-editar').classList.add('hidden');
         loadProductos(container);
@@ -348,12 +353,15 @@ function bindPaper(container, prefix) {
   const wrap = container.querySelector(`#${prefix}-papel-wrap`);
   const select = container.querySelector(`#${prefix}-papel`);
   const doble = container.querySelector(`#${prefix}-doble`);
+  const pdf = container.querySelector(`#${prefix}-pdf`);
   const sync = () => {
     toggle.disabled = inventario.checked;
     if (inventario.checked) toggle.checked = false;
     wrap.classList.toggle('hidden', !toggle.checked);
     select.required = toggle.checked;
     if (!toggle.checked) { select.value = ''; doble.checked = false; }
+    pdf.disabled = !toggle.checked;
+    if (!toggle.checked) pdf.checked = false;
   };
   toggle.addEventListener('change', sync);
   inventario.addEventListener('change', sync);
