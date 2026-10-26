@@ -218,16 +218,16 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
     }
 
     content.innerHTML = `
-      <div class="page-padding page-padding-bottom" style="padding-bottom:8rem">
+      <div class="page-padding catalogo-pagina">
         ${selector}
         <div class="space-y-3">
           ${productos.map((p, i) => {
             const agotado = p.tieneInventario && (p.stock ?? 0) <= 0;
             return `
                   <div class="card animate-fade-in" style="animation-delay:${i * 30}ms" data-product-id="${p.id}" data-nombre="${escapeHtml(p.nombre)}" data-precio="${p.precio}" data-papel="${p.consumePapel ? '1' : '0'}" data-pdf="${p.requierePdf ? '1' : '0'}" data-revision="${p.revisionImpresion || ''}" data-doble="${p.admiteDobleCara ? '1' : '0'}" ${agotado ? 'data-agotado="1"' : ''}>
-                    <div class="flex-1 mr-4">
-                      <h3 class="font-semibold text-primary text-[0.9375rem]">${p.nombre}</h3>
-                      ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5 leading-relaxed">${p.descripcion}</p>` : ''}
+                    <div class="min-w-0 flex-1 mr-4">
+                      <h3 class="font-semibold text-primary text-[0.9375rem] break-words">${escapeHtml(p.nombre)}</h3>
+                      ${p.descripcion ? `<p class="text-sm text-text-secondary mt-0.5 leading-relaxed break-words">${escapeHtml(p.descripcion)}</p>` : ''}
                       <div class="flex flex-wrap items-center gap-2 mt-2">
                         <span class="inline-block font-bold text-accent text-lg">$${p.precio.toFixed(2)}</span>
                         ${p.consumePapel ? '<span class="text-sm">por cara · papel sujeto a disponibilidad</span>' : ''}
@@ -251,7 +251,6 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
                   </div>`}
                 </div>
               </div>
-            </div>
           `; }).join('')}
         </div>
       </div>
@@ -578,6 +577,7 @@ function actualizarBarra(content, carrito) {
   const count = items.reduce((sum, c) => sum + c.cantidad, 0);
 
   const bar = content.querySelector('#carrito-bar');
+  content.querySelector('.catalogo-pagina')?.classList.toggle('catalogo-con-carrito', count > 0);
   const countEl = content.querySelector('#carrito-count');
   const totalEl = content.querySelector('#carrito-total');
 

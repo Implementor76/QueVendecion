@@ -438,3 +438,11 @@ body {
 .page-padding-bottom {
   padding-bottom: 5.5rem;
 }
+
+.catalogo-pagina {
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+}
+
+.catalogo-pagina.catalogo-con-carrito {
+  padding-bottom: calc(11rem + env(safe-area-inset-bottom));
+}
