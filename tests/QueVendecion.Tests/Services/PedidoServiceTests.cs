@@ -77,6 +77,28 @@ public class PedidoServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CrearAsync_RechazaPrecioCambiadoSinGuardarPedido()
+    {
+        var tienda = await SeedTienda();
+        var producto = await SeedProducto(tienda.Id, precio: 10m);
+        producto.Precio = 12m;
+        await _context.SaveChangesAsync();
+        var dto = new CrearPedidoDto
+        {
+            TiendaId = tienda.Id,
+            ClienteNombre = "Cliente de prueba",
+            ClaveIdempotencia = Guid.NewGuid(),
+            TotalEsperado = 10m,
+            Items = new() { new() { ProductoId = producto.Id, Cantidad = 1 } }
+        };
+
+        var error = await Assert.ThrowsAsync<QueVendecion.Application.Exceptions.ReglaNegocioException>(
+            () => _service.CrearAsync(dto));
+        Assert.Equal("precio_actualizado", error.Codigo);
+        Assert.Empty(await _context.Pedidos.ToListAsync());
+    }
+
+    [Fact]
     public async Task CrearAsync_DeberiaLanzarExcepcionSiProductoNoExiste()
     {
         var tienda = await SeedTienda();

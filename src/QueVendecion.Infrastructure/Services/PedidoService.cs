@@ -386,7 +386,7 @@ public class PedidoService : IPedidoService
 
         try { pedido.Total = checked(pedido.Items.Sum(i => i.Subtotal)); }
         catch (OverflowException) { throw new ReglaNegocioException("importe_invalido", "El pedido supera el importe permitido."); }
-        if (pdfs.Count > 0 && dto.TotalEsperado != pedido.Total)
+        if ((pdfs.Count > 0 || dto.TotalEsperado.HasValue) && dto.TotalEsperado != pedido.Total)
             throw new ReglaNegocioException("precio_actualizado", "Cambió el total. Revisa el pedido antes de enviarlo.");
 
         _context.Pedidos.Add(pedido);

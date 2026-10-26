@@ -257,6 +257,46 @@ public class PdfPedidoTests
         finally { if (Directory.Exists(raiz)) Directory.Delete(raiz, true); }
     }
 
+    [Fact]
+    public async Task ReintentoTrasPerderRespuestaRecuperaPedidoAunqueLaVentanaYaNoExista()
+    {
+        var raiz = Path.Combine(Path.GetTempPath(), "qvd-pdf-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var db = TestDbContextFactory.Create();
+            var (tienda, cliente, papel, servicio) = await Sembrar(db);
+            var zona = TimeZoneInfo.FindSystemTimeZoneById("America/Hermosillo");
+            var fecha = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zona)).AddDays(2);
+            tienda.OperacionJson = JsonSerializer.Serialize(new OperacionTiendaDto { PedidosProgramados = true,
+                VentanasServicio = new() { new() { Dia = fecha.DayOfWeek, Inicio = "08:00", Fin = "23:59" } } });
+            await db.SaveChangesAsync();
+            var docs = Servicio(db, raiz);
+            var sesion = await docs.ValidarSesionAsync(tienda.Id, await docs.CrearSesionAsync(tienda.Id, cliente.Id));
+            var bytes = Pdf(5);
+            await using var stream = new MemoryStream(bytes);
+            var documento = await docs.SubirAsync(tienda.Id, sesion, "programado.pdf", "application/pdf", bytes.Length, stream, default);
+            var dto = new CrearPedidoDto { TiendaId = tienda.Id, ClienteId = cliente.Id,
+                SesionDocumentoHash = sesion.TokenHash, ClaveIdempotencia = Guid.NewGuid(), TotalEsperado = 15m,
+                Modalidad = ModalidadPedido.Programado, FechaServicio = fecha, VentanaSolicitada = "08:00-23:59",
+                Items = new() { new() { ProductoId = servicio.Id, DocumentoPdfId = documento.Id,
+                    Paginas = "todas", Juegos = 1, DobleCara = false, Cantidad = 5,
+                    RevisionImpresion = servicio.RevisionImpresion, PrecioEsperado = 3m } } };
+            var pedidos = new PedidoService(db, docs);
+            var primero = await pedidos.CrearAsync(dto);
+            Assert.Equal(95, papel.Stock);
+            // Simula una respuesta perdida y un reintento cuando ya cambió la operación.
+            tienda.OperacionJson = JsonSerializer.Serialize(new OperacionTiendaDto { PedidosProgramados = false });
+            await db.SaveChangesAsync();
+            var recuperado = await pedidos.CrearAsync(dto);
+            Assert.Equal(primero.Id, recuperado.Id);
+            Assert.Equal(fecha, recuperado.FechaServicio);
+            Assert.Equal(95, papel.Stock);
+            Assert.Single(await db.Pedidos.ToListAsync());
+            Assert.Single(await db.MovimientosInventario.ToListAsync());
+        }
+        finally { if (Directory.Exists(raiz)) Directory.Delete(raiz, true); }
+    }
+
     private static DocumentoService Servicio(QueVendecion.Infrastructure.Data.QueVendecionDbContext db, string raiz) =>
         new(db, new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Documentos:Ruta"] = raiz }).Build());
 

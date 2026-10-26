@@ -1,6 +1,7 @@
 import { api } from '../utils/api.js';
 import { getClient, setClient, removeClient } from '../utils/clientAuth.js';
 import { fechaHoraEnTienda } from '../utils/fechaTienda.js';
+import { crearRevisionPedido, crearIntentoPendiente, leerIntentoPendiente, clasificarErrorPedido } from '../utils/pedidoPendiente.js';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -120,6 +121,7 @@ function renderApp(container, slug, tienda, cliente, opciones) {
         <span class="badge badge-accent">${cliente.nombre}</span>
       </div>
 
+      <div id="aviso-pedido-anterior" class="page-padding hidden" role="status"></div>
       <main id="client-content" style="margin-top:-8px"></main>
 
       <div class="bottom-nav">
@@ -145,8 +147,21 @@ function renderApp(container, slug, tienda, cliente, opciones) {
 
   let currentTab = 'menu';
   let carrito = {};
+  const pendienteKey = `qvd_pdf_pedido_pendiente_${slug}_${cliente.id}`;
+  const avisoAnterior = container.querySelector('#aviso-pedido-anterior');
   const seleccion = { modalidad: opciones.recepcionDisponible ? (opciones.alMomentoDisponible ? 'AlMomento' : (tienda.operacion.pedidosProgramados ? 'Programado' : null)) : null,
     entrega: tienda.operacion.recoleccion && tienda.operacion.domicilio ? '' : tienda.operacion.recoleccion ? 'Recoleccion' : 'Domicilio', fecha: '', ventana: '' };
+
+  const actualizarAviso = () => mostrarIntentoAnterior(avisoAnterior, pendienteKey, cliente, slug,
+    () => switchTab('pedidos'), tipo => {
+      if (tipo === 'pdf_vencido') {
+        for (const [clave, partida] of Object.entries(carrito))
+          if (partida.documentoPdfId) delete carrito[clave];
+        container.querySelectorAll('[data-pdf="1"]').forEach(card => card.dispatchEvent(new Event('pdf-reset')));
+        const contenido = container.querySelector('#client-content');
+        if (contenido.querySelector('#carrito-bar')) actualizarBarra(contenido, carrito);
+      }
+    });
 
   function switchTab(tab) {
     currentTab = tab;
@@ -159,7 +174,7 @@ function renderApp(container, slug, tienda, cliente, opciones) {
     });
 
     const content = container.querySelector('#client-content');
-    if (tab === 'menu') renderMenuTab(content, slug, cliente, carrito, (c) => { carrito = c; }, tienda, opciones, seleccion);
+    if (tab === 'menu') renderMenuTab(content, slug, cliente, carrito, (c) => { carrito = c; }, tienda, opciones, seleccion, pendienteKey, actualizarAviso);
     else if (tab === 'pedidos') renderPedidosTab(content, slug, cliente, tienda.operacion.zonaHoraria);
     else if (tab === 'cuenta') renderCuentaTab(container, slug, tienda, cliente);
   }
@@ -169,9 +184,74 @@ function renderApp(container, slug, tienda, cliente, opciones) {
   });
 
   switchTab('menu');
+  actualizarAviso();
 }
 
-async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion) {
+function mostrarIntentoAnterior(contenedor, clave, cliente, slug, verPedidos, alRechazar) {
+  const estado = leerIntentoPendiente(sessionStorage.getItem(clave), cliente.telefono);
+  if (estado.tipo === 'ninguno') { contenedor.classList.add('hidden'); contenedor.innerHTML = ''; return; }
+  contenedor.classList.remove('hidden');
+  const intento = estado.intento;
+  const p = intento?.payload;
+  const partidas = intento?.partidas || [];
+  const detalle = p ? `<details class="text-sm"><summary class="cursor-pointer font-medium text-primary">Revisar el envío anterior</summary>
+    <div class="mt-2 space-y-1 text-text-secondary">
+      <p>${p.modalidad === 'Programado' ? 'Programado' : 'Al momento'} · ${escapeHtml(p.fechaServicio)}${p.ventanaSolicitada ? ` · ${escapeHtml(p.ventanaSolicitada)}` : ''} · ${p.entrega === 'Domicilio' ? 'Domicilio' : 'Recolección'}</p>
+      ${partidas.map(i => `<p>${escapeHtml(i.nombre || `Producto #${i.id}`)} ×${escapeHtml(i.cantidad)}${i.nombrePdf ? ` · ${escapeHtml(i.nombrePdf)}${i.paginas ? ` · páginas ${escapeHtml(i.paginas)}` : ''}${i.juegos ? ` · ${escapeHtml(i.juegos)} juegos` : ''}${i.dobleCara ? ' · ambos lados' : ' · un lado'}` : ''}</p>`).join('')}
+      <p>Pago: ${escapeHtml(p.formaPago)}${p.observaciones ? ` · Nota: ${escapeHtml(p.observaciones)}` : ''}</p>
+      <p class="font-semibold text-primary">Importe: $${Number(p.totalEsperado).toFixed(2)}</p>
+    </div></details>` : '';
+  contenedor.innerHTML = `<div class="card-elevated space-y-3">
+    <p class="font-semibold text-primary">Envío anterior sin resultado confirmado</p>
+    <p class="text-sm">${intento ? 'No pudimos confirmar si se registró tu pedido. Consulta o reintenta el envío anterior antes de crear otro. Se enviarán exactamente los datos anteriores sin duplicar un pedido registrado.' : 'No se pudo leer el envío anterior guardado en este navegador. Para evitar duplicados, verifica con la tienda si se registró.'}</p>
+    ${detalle}
+    ${intento ? '<button type="button" class="btn-accent comprobar-anterior">Consultar o reintentar envío anterior</button>' : ''}
+    <p class="estado-anterior text-sm" role="status"></p>
+    <details class="text-sm"><summary class="cursor-pointer">Si la tienda confirmó que no existe el pedido</summary>
+      <p class="my-2">Solo después de verificarlo con la tienda puedes liberar este navegador para crear otro pedido.</p>
+      <button type="button" class="btn-ghost liberar-anterior">La tienda confirmó que no se registró</button>
+    </details>
+  </div>`;
+  const mensaje = contenedor.querySelector('.estado-anterior');
+  contenedor.querySelector('.liberar-anterior').addEventListener('click', () => {
+    if (window.confirm('Confirma solo si la tienda verificó que este pedido NO se registró. Si existe, crear otro puede duplicarlo.')) {
+      sessionStorage.removeItem(clave);
+      contenedor.innerHTML = ''; contenedor.classList.add('hidden');
+    }
+  });
+  contenedor.querySelector('.comprobar-anterior')?.addEventListener('click', async event => {
+    const boton = event.currentTarget; boton.disabled = true;
+    if (intento.payload.items.some(i => i.documentoPdfId) && !cliente.sesionDocumentos) {
+      mensaje.textContent = 'Falta la sesión de documentos de este envío. Conservamos los datos; consulta a la tienda antes de crear otro pedido.';
+      boton.disabled = false;
+      return;
+    }
+    mensaje.textContent = 'Comprobando el envío anterior…';
+    try {
+      const pedido = await api.public.crearPedido(slug, intento.payload, cliente.sesionDocumentos);
+      sessionStorage.removeItem(clave);
+      contenedor.innerHTML = `<div class="card-elevated space-y-2"><p class="font-semibold text-success">Pedido #${pedido.id} registrado.</p><p class="text-sm">El envío anterior ya está registrado. Tu captura actual no se envió de nuevo.</p><button type="button" class="btn-ghost ver-pedido-anterior">Ver Mis pedidos</button></div>`;
+      contenedor.querySelector('.ver-pedido-anterior').addEventListener('click', verPedidos);
+    } catch (error) {
+      const tipo = clasificarErrorPedido(error);
+      if (tipo === 'horario' || tipo === 'rechazo' || tipo === 'pdf_vencido') {
+        sessionStorage.removeItem(clave);
+        alRechazar(tipo);
+        const explicacion = tipo === 'pdf_vencido' ? 'El archivo temporal venció. Adjunta el PDF nuevamente y revisa otro pedido.'
+          : tipo === 'horario' ? 'Este intento fue rechazado por el horario. Elige otra fecha y revisa nuevamente tu pedido.'
+            : `Este intento fue rechazado sin registrar pedido: ${error.message}. Corrige la captura y revísala de nuevo.`;
+        contenedor.innerHTML = `<div class="card-elevated text-sm text-error" role="status">${escapeHtml(explicacion)}</div>`;
+      } else {
+        mensaje.textContent = tipo === 'sesion' ? 'La sesión de documentos no permite comprobar este intento. Consérvalo y consulta a la tienda; no se borraron tus datos.'
+          : tipo === 'conflicto' ? 'Este envío no coincide con el registro anterior. No se creó otro pedido; consulta a la tienda antes de continuar.'
+            : 'Aún no pudimos confirmar el resultado. Conservamos el envío anterior para consultarlo o reintentarlo sin duplicarlo.';
+        boton.disabled = false;
+      }
+    }
+  });
+}
+
+async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion, pendienteKey, actualizarAviso) {
   if (!seleccion.modalidad) {
     content.innerHTML = `<div class="page-padding"><div class="card-elevated"><h2 class="font-bold text-primary">Pedidos cerrados por ahora</h2><p>${escapeHtml(tienda.operacion.mensajePublico || 'Consulta el horario de atención de la tienda.')}</p></div></div>`;
     return;
@@ -210,6 +290,7 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
           ${(opciones.fechas.find(o => o.fecha === seleccion.fecha)?.ventanas || []).map(v => `<option value="${v}">${v}</option>`).join('')}
         </select></label>` : ''}
         <p class="text-sm text-text-secondary">${!seleccion.entrega ? 'Selecciona recoger o domicilio para ver los precios y productos correspondientes.' : necesitaFecha && !fechaMenu ? 'Selecciona una fecha para ver los productos disponibles.' : `Productos para ${fechaMenu}.`}</p>
+        <p id="aviso-opciones" class="text-sm text-error" role="status"></p>
       </div>`;
     if (productos.length === 0) {
       content.innerHTML = `<div class="page-padding">${selector}<div class="empty-state"><h3>${!seleccion.entrega ? 'Selecciona la forma de entrega' : necesitaFecha && !fechaMenu ? 'Selecciona una fecha' : 'Sin productos para esta fecha'}</h3><p>${!seleccion.entrega ? 'Así verás los productos y precios correctos.' : necesitaFecha && !fechaMenu ? 'Elige una fecha de servicio para ver el catálogo.' : 'Elige otra fecha de servicio.'}</p></div></div>`;
@@ -280,6 +361,7 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
             </button>
           </div>
           <div id="resumen-pedido" class="space-y-2 mb-5"></div>
+          <p id="detalle-revision" class="text-sm text-text-secondary mb-3"></p>
           <p class="text-sm mb-4">${seleccion.entrega === 'Domicilio' ? 'Entrega a domicilio' : 'Recoger en tienda'}</p>
           <label id="direccion-entrega-wrap" class="block text-sm mb-4 hidden">Dirección para entrega a domicilio
             <textarea id="direccion-entrega" class="input-field" rows="2" maxlength="300" placeholder="Calle, número y referencias"></textarea>
@@ -304,20 +386,21 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
           <button id="btn-confirmar" class="btn-primary w-full">
             <i data-lucide="check" class="w-5 h-5"></i> Confirmar Pedido
           </button>
+          <p id="estado-envio" class="text-sm mt-3" role="status"></p>
         </div>
       </div>
     `;
 
     if (window.lucide) lucide.createIcons();
     bindSeleccion();
-    setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones);
+    setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones, pendienteKey, actualizarAviso);
     function bindSeleccion() {
       const entrega = content.querySelector('#entrega-catalogo');
       entrega.value = seleccion.entrega;
       entrega.addEventListener('change', () => {
         seleccion.entrega = entrega.value;
         Object.keys(carrito).forEach(k => delete carrito[k]);
-        renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion);
+        renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion, pendienteKey, actualizarAviso);
       });
       const modalidad = content.querySelector('#modalidad-pedido');
       modalidad.value = seleccion.modalidad;
@@ -325,15 +408,14 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
         seleccion.modalidad = modalidad.value;
         seleccion.fecha = ''; seleccion.ventana = '';
         Object.keys(carrito).forEach(k => delete carrito[k]);
-        renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion);
+        renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion, pendienteKey, actualizarAviso);
       });
       const fecha = content.querySelector('#fecha-servicio');
       if (fecha) {
         fecha.value = seleccion.fecha;
         fecha.addEventListener('change', () => {
           seleccion.fecha = fecha.value; seleccion.ventana = '';
-          Object.keys(carrito).forEach(k => delete carrito[k]);
-          renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion);
+          renderMenuTab(content, slug, cliente, carrito, updateCarrito, tienda, opciones, seleccion, pendienteKey, actualizarAviso);
         });
       }
       const ventana = content.querySelector('#ventana-servicio');
@@ -342,26 +424,18 @@ async function renderMenuTab(content, slug, cliente, carrito, updateCarrito, tie
   }
 }
 
-function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones) {
-  const pendienteKey = `qvd_pdf_pedido_pendiente_${slug}_${cliente.id}`;
-  const pendienteRaw = sessionStorage.getItem(pendienteKey);
-  if (pendienteRaw) {
-    const aviso = document.createElement('div'); aviso.className = 'card mb-4 space-y-2';
-    aviso.innerHTML = '<p>Hay un envío pendiente. Reintenta con la misma clave para comprobar si se registró.</p><button class="btn-accent pdf-reintentar">Reintentar pedido</button><button class="btn-ghost pdf-descartar">Descartar intento</button>';
-    content.querySelector('.page-padding')?.prepend(aviso);
-    aviso.querySelector('.pdf-reintentar').addEventListener('click', async () => {
-      const boton = aviso.querySelector('.pdf-reintentar'); boton.disabled = true;
-      try { await api.public.crearPedido(slug, JSON.parse(pendienteRaw), cliente.sesionDocumentos); sessionStorage.removeItem(pendienteKey); aviso.textContent = 'Pedido registrado. Consúltalo en Mis pedidos.'; }
-      catch (e) { aviso.querySelector('p').textContent = e.message; boton.disabled = false; }
-    });
-    aviso.querySelector('.pdf-descartar').addEventListener('click', () => { sessionStorage.removeItem(pendienteKey); aviso.remove(); });
-  }
+function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion, opciones, pendienteKey, actualizarAviso) {
   content.querySelectorAll('[data-pdf="1"]').forEach(card => {
     let documento = null;
     const archivo = card.querySelector('.pdf-archivo'), estado = card.querySelector('.pdf-estado');
     const modo = card.querySelector('.pdf-modo'), rango = card.querySelector('.pdf-rango');
     const juegos = card.querySelector('.pdf-juegos'), lados = card.querySelector('.pdf-lados');
     const preview = card.querySelector('.pdf-preview');
+    card.addEventListener('pdf-reset', () => {
+      documento = null; archivo.value = '';
+      estado.textContent = 'El archivo temporal venció. Adjunta el PDF nuevamente.';
+      preview.textContent = 'Adjunta el PDF para calcular.';
+    });
     archivo.addEventListener('change', () => {
       documento = null;
       estado.textContent = 'Valida y sube el PDF seleccionado antes de agregarlo.';
@@ -472,6 +546,64 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
   const modal = content.querySelector('#modal-pedido');
   const btnCancelar = content.querySelector('#btn-cancelar');
   const btnConfirmar = content.querySelector('#btn-confirmar');
+  const estadoEnvio = content.querySelector('#estado-envio');
+  const avisoOpciones = content.querySelector('#aviso-opciones');
+  let revision = null;
+  let enviando = false;
+  const informar = (mensaje, error = false) => {
+    estadoEnvio.textContent = mensaje;
+    estadoEnvio.className = `text-sm mt-3 ${error ? 'text-error' : 'text-primary'}`;
+  };
+  const refrescarOpciones = async () => {
+    const frescas = await api.public.getOpciones(slug);
+    Object.assign(opciones, frescas);
+    if (seleccion.modalidad === 'Programado') {
+      const fecha = content.querySelector('#fecha-servicio');
+      const ventana = content.querySelector('#ventana-servicio');
+      const dias = frescas.fechas || [];
+      const dia = dias.find(d => d.fecha === seleccion.fecha);
+      fecha.innerHTML = '<option value="">Selecciona fecha</option>' +
+        dias.map(d => `<option value="${escapeHtml(d.fecha)}">${escapeHtml(d.fecha)}</option>`).join('') +
+        (seleccion.fecha && !dia ? `<option value="${escapeHtml(seleccion.fecha)}" disabled>${escapeHtml(seleccion.fecha)} · ya no disponible</option>` : '');
+      fecha.value = seleccion.fecha || '';
+      ventana.innerHTML = '<option value="">Selecciona ventana</option>' +
+        (dia?.ventanas || []).map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('') +
+        (seleccion.ventana && !dia?.ventanas?.includes(seleccion.ventana)
+          ? `<option value="${escapeHtml(seleccion.ventana)}" disabled>${escapeHtml(seleccion.ventana)} · ya no disponible</option>` : '');
+      ventana.value = seleccion.ventana || '';
+    }
+    return frescas;
+  };
+  const fechaValida = (r, frescas) => r.modalidad === 'AlMomento'
+    ? frescas.alMomentoDisponible && r.fechaServicio === frescas.hoy
+    : (frescas.fechas || []).some(d => d.fecha === r.fechaServicio && d.ventanas.includes(r.ventanaSolicitada));
+  const actualizarPrecios = async () => {
+    const fecha = seleccion.modalidad === 'Programado' ? seleccion.fecha : opciones.hoy;
+    const productos = await api.public.getMenu(slug, fecha, seleccion.modalidad, seleccion.entrega);
+    for (const [clave, partida] of Object.entries(carrito)) {
+      const producto = productos.find(p => p.id === Number(partida.id));
+      if (!producto || (partida.documentoPdfId && producto.revisionImpresion !== partida.revisionImpresion)) {
+        delete carrito[clave];
+        continue;
+      }
+      partida.precio = producto.precio;
+      const card = content.querySelector(`[data-product-id="${partida.id}"]`);
+      if (card) {
+        card.dataset.precio = producto.precio;
+        const precio = card.querySelector('.text-accent.text-lg');
+        if (precio) precio.textContent = `$${Number(producto.precio).toFixed(2)}`;
+      }
+    }
+    actualizarBarra(content, carrito);
+  };
+  const detalleRevision = () => {
+    const pago = content.querySelector('.pay-option.active')?.dataset.value || 'Efectivo';
+    const nota = content.querySelector('#observaciones').value.trim();
+    const direccion = content.querySelector('#direccion-entrega').value.trim();
+    content.querySelector('#detalle-revision').textContent =
+      `Pago: ${pago}${nota ? ` · Nota: ${nota}` : ''}${revision?.entrega === 'Domicilio' ? ` · Dirección: ${direccion || 'pendiente'}` : ''}`;
+    return { pago, nota, direccion };
+  };
   const syncDireccion = () => {
     const domicilio = seleccion.entrega === 'Domicilio';
     content.querySelector('#direccion-entrega-wrap').classList.toggle('hidden', !domicilio);
@@ -479,13 +611,26 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
   };
   syncDireccion();
 
-  btnHacerPedido?.addEventListener('click', () => {
-    if (seleccion.modalidad === 'Programado' && (!seleccion.fecha || !seleccion.ventana)) {
-      alert('Selecciona fecha y ventana de servicio.'); return;
-    }
-    mostrarResumen(content, carrito);
-    content.querySelector('#resumen-pedido').insertAdjacentHTML('beforeend', `<p class="text-sm text-primary">${seleccion.modalidad === 'Programado' ? `Horario solicitado: ${seleccion.fecha} ${seleccion.ventana}` : `Al momento: ${opciones.hoy}. La tienda confirmará el horario estimado.`}</p><p class="text-sm text-text-secondary">${seleccion.entrega === 'Domicilio' ? 'Entrega a domicilio' : 'Recolección en tienda'} · pendiente de confirmación.</p>`);
-    modal.classList.remove('hidden');
+  btnHacerPedido?.addEventListener('click', async () => {
+    if (btnHacerPedido.disabled) return;
+    btnHacerPedido.disabled = true;
+    avisoOpciones.textContent = '';
+    try {
+      const frescas = await refrescarOpciones();
+      const propuesta = crearRevisionPedido(carrito, seleccion, frescas.hoy);
+      if (!propuesta.items.length) return;
+      if (!frescas.recepcionDisponible || !fechaValida(propuesta, frescas)) {
+        avisoOpciones.textContent = 'La fecha o ventana ya no está disponible. Elige otra y revisa nuevamente tu pedido.';
+        return;
+      }
+      revision = propuesta;
+      mostrarResumen(content, revision.partidas);
+      content.querySelector('#resumen-pedido').insertAdjacentHTML('beforeend', `<p class="text-sm text-primary">${revision.modalidad === 'Programado' ? `Horario solicitado: ${escapeHtml(revision.fechaServicio)} ${escapeHtml(revision.ventanaSolicitada)}` : `Al momento: ${escapeHtml(revision.fechaServicio)}. La tienda confirmará el horario estimado.`}</p><p class="text-sm text-text-secondary">${revision.entrega === 'Domicilio' ? 'Entrega a domicilio' : 'Recolección en tienda'} · pendiente de confirmación.</p>`);
+      detalleRevision(); informar('Revisa los datos antes de confirmar.');
+      modal.classList.remove('hidden');
+    } catch {
+      avisoOpciones.textContent = 'No pudimos actualizar los horarios. Revisa tu conexión y vuelve a abrir el resumen.';
+    } finally { btnHacerPedido.disabled = false; }
   });
 
   btnCancelar?.addEventListener('click', () => {
@@ -496,76 +641,97 @@ function setupCarrito(content, slug, cliente, carrito, updateCarrito, seleccion,
     btn.addEventListener('click', () => {
       content.querySelectorAll('.pay-option').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      detalleRevision();
     });
   });
+  for (const campo of ['#observaciones', '#direccion-entrega'])
+    content.querySelector(campo).addEventListener('input', detalleRevision);
 
   btnConfirmar?.addEventListener('click', async () => {
-    const items = Object.values(carrito).map(c => ({
-      productoId: parseInt(c.id),
-      cantidad: c.cantidad,
-      carasPorJuego: c.documentoPdfId ? null : c.carasPorJuego ?? null,
-      juegos: c.juegos ?? null, dobleCara: c.dobleCara ?? null,
-      documentoPdfId: c.documentoPdfId ?? null, paginas: c.paginas ?? null,
-      revisionImpresion: c.revisionImpresion ?? null,
-      precioEsperado: c.documentoPdfId ? c.precio : null
-    }));
-
-    if (items.length === 0) return;
-
-    const activePay = content.querySelector('.pay-option.active');
-    const formaPago = activePay ? activePay.dataset.value : 'Efectivo';
-    const observaciones = content.querySelector('#observaciones').value;
-    const entrega = seleccion.entrega;
-    const direccionEntrega = content.querySelector('#direccion-entrega').value.trim();
-    if (entrega === 'Domicilio' && !direccionEntrega) { alert('Captura la dirección de entrega.'); return; }
-
+    if (enviando || !revision?.items.length) return;
+    const anterior = leerIntentoPendiente(sessionStorage.getItem(pendienteKey), cliente.telefono);
+    if (anterior.tipo !== 'ninguno') {
+      informar('Consulta el envío anterior antes de crear otro pedido. Tu resumen actual no se enviará.', true);
+      actualizarAviso();
+      return;
+    }
+    const campos = detalleRevision();
+    if (revision.entrega === 'Domicilio' && !campos.direccion) {
+      informar('Captura la dirección de entrega y revisa nuevamente.', true); return;
+    }
+    if (revision.items.some(i => i.documentoPdfId) && !cliente.sesionDocumentos) {
+      informar('La sesión de documentos no está disponible. Conserva tu captura y vuelve a identificarte antes de enviar.', true);
+      return;
+    }
+    enviando = true; btnConfirmar.disabled = true;
+    let intento = null;
     try {
-      btnConfirmar.disabled = true;
-      const nuevo = {
-        claveIdempotencia: crypto.randomUUID(),
-        totalEsperado: Object.values(carrito).reduce((sum, c) => sum + c.precio * c.cantidad, 0),
-        telefonoCliente: cliente.telefono,
-        formaPago,
-        observaciones: observaciones || null,
-        modalidad: seleccion.modalidad,
-        entrega,
-        direccionEntrega: entrega === 'Domicilio' ? direccionEntrega : null,
-        fechaServicio: seleccion.modalidad === 'Programado' ? seleccion.fecha : opciones.hoy,
-        ventanaSolicitada: seleccion.modalidad === 'Programado' ? seleccion.ventana : null,
-        items
+      const frescas = await refrescarOpciones();
+      if (!frescas.recepcionDisponible || !fechaValida(revision, frescas) ||
+          revision.modalidad !== seleccion.modalidad || revision.entrega !== seleccion.entrega ||
+          (revision.modalidad === 'Programado' && (revision.fechaServicio !== seleccion.fecha || revision.ventanaSolicitada !== seleccion.ventana))) {
+        informar('Cambió la fecha o ventana disponible. Elige una opción vigente y abre nuevamente el resumen.', true);
+        avisoOpciones.textContent = 'Elige una fecha y ventana vigentes; tu carrito se conserva.';
+        modal.classList.add('hidden'); revision = null;
+        return;
+      }
+      const datos = {
+        claveIdempotencia: crypto.randomUUID(), totalEsperado: revision.totalEsperado,
+        telefonoCliente: cliente.telefono, formaPago: campos.pago,
+        observaciones: campos.nota || null, modalidad: revision.modalidad,
+        entrega: revision.entrega, direccionEntrega: revision.entrega === 'Domicilio' ? campos.direccion : null,
+        fechaServicio: revision.fechaServicio, ventanaSolicitada: revision.ventanaSolicitada,
+        items: revision.items
       };
-      const datos = sessionStorage.getItem(pendienteKey) ? JSON.parse(sessionStorage.getItem(pendienteKey)) : nuevo;
-      sessionStorage.setItem(pendienteKey, JSON.stringify(datos));
-      await api.public.crearPedido(slug, datos, cliente.sesionDocumentos);
-      sessionStorage.removeItem(pendienteKey);
-
+      const preparado = crearIntentoPendiente(datos, revision.partidas);
+      sessionStorage.setItem(pendienteKey, JSON.stringify(preparado));
+      intento = preparado;
+      informar('Enviando el pedido…');
+      const pedido = await api.public.crearPedido(slug, intento.payload, cliente.sesionDocumentos);
+      sessionStorage.removeItem(pendienteKey); actualizarAviso();
       modal.classList.add('hidden');
-      content.innerHTML = `
-        <div class="min-h-screen flex items-center justify-center p-8">
-          <div class="text-center animate-scale-in">
-            <div class="w-20 h-20 rounded-full bg-success/15 mx-auto mb-5 flex items-center justify-center">
-              <i data-lucide="check" class="w-10 h-10 text-success"></i>
-            </div>
-            <h1 class="text-2xl font-bold text-primary mb-2">¡Pedido Enviado!</h1>
-            <p class="text-text-secondary mb-8 leading-relaxed">Tu pedido ha sido enviado a la tienda.<br>Espera confirmación.</p>
-            <button id="btn-volver-menu" class="btn-primary">
-              <i data-lucide="utensils" class="w-5 h-5"></i> Volver al Menú
-            </button>
-          </div>
-        </div>
-      `;
+      content.innerHTML = `<div class="min-h-screen flex items-center justify-center p-8"><div class="text-center animate-scale-in">
+        <div class="w-20 h-20 rounded-full bg-success/15 mx-auto mb-5 flex items-center justify-center"><i data-lucide="check" class="w-10 h-10 text-success"></i></div>
+        <h1 class="text-2xl font-bold text-primary mb-2">¡Pedido #${pedido.id} enviado!</h1>
+        <p class="text-text-secondary mb-8 leading-relaxed">Importe registrado: $${Number(pedido.total).toFixed(2)}.<br>Espera confirmación de la tienda.</p>
+        <button id="btn-volver-menu" class="btn-primary"><i data-lucide="utensils" class="w-5 h-5"></i> Volver al Menú</button>
+        </div></div>`;
       if (window.lucide) lucide.createIcons();
       content.querySelector('#btn-volver-menu').addEventListener('click', () => {
-        Object.keys(carrito).forEach(k => delete carrito[k]);
-        updateCarrito(carrito);
-        const menuBtn = content.closest('#app').querySelector('[data-tab="menu"]');
-        if (menuBtn) menuBtn.click();
-        else window.location.reload();
+        Object.keys(carrito).forEach(k => delete carrito[k]); updateCarrito(carrito);
+        content.closest('#app').querySelector('[data-tab="menu"]')?.click();
       });
     } catch (error) {
-      alert(error.message || 'Error al enviar el pedido. Intenta de nuevo.');
-      btnConfirmar.disabled = false;
-    }
+      if (!intento) {
+        informar('No se envió el pedido. No pudimos comprobar horarios o guardar el intento; revisa la conexión e inténtalo de nuevo.', true);
+        return;
+      }
+      const tipo = clasificarErrorPedido(error);
+      if (tipo === 'horario' || tipo === 'rechazo' || tipo === 'pdf_vencido') {
+        sessionStorage.removeItem(pendienteKey); actualizarAviso();
+        if (tipo === 'pdf_vencido') {
+          for (const [clave, partida] of Object.entries(carrito)) if (partida.documentoPdfId) delete carrito[clave];
+          content.querySelectorAll('[data-pdf="1"]').forEach(card => card.dispatchEvent(new Event('pdf-reset')));
+          actualizarBarra(content, carrito);
+        }
+        if (error.code === 'precio_actualizado') {
+          try { await actualizarPrecios(); }
+          catch { /* La captura sigue disponible; se consultará el catálogo al revisar. */ }
+        }
+        const mensaje = tipo === 'pdf_vencido' ? 'El archivo temporal venció. Adjunta el PDF nuevamente; conservamos las demás partidas.'
+          : tipo === 'horario' ? 'Este intento fue rechazado por el horario. Elige otra fecha y revisa de nuevo; tu carrito se conserva.'
+            : error.code === 'precio_actualizado' ? 'Cambió el precio. Actualizamos el carrito disponible; revisa el nuevo importe antes de confirmar. Si faltaba una impresión, agrégala de nuevo.'
+            : `El pedido no se registró: ${error.message}. Corrige los datos y vuelve a revisar.`;
+        informar(mensaje, true);
+        modal.classList.add('hidden'); revision = null;
+        avisoOpciones.textContent = mensaje;
+      } else {
+        actualizarAviso();
+        informar(tipo === 'sesion' ? 'La sesión de documentos no permite comprobar el resultado. Conservamos el envío anterior; consulta a la tienda.'
+          : tipo === 'conflicto' ? 'El envío no coincide con el intento anterior. Conservamos sus datos; consulta a la tienda.'
+            : 'No pudimos confirmar si se registró. Consulta o reintenta el envío anterior antes de crear otro.', true);
+      }
+    } finally { enviando = false; if (content.contains(btnConfirmar)) btnConfirmar.disabled = false; }
   });
 
   actualizarBarra(content, carrito);
